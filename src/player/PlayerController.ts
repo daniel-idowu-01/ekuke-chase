@@ -30,10 +30,13 @@ export class PlayerController {
   private isGrounded: boolean = false;
   private isAttacking: boolean = false;
   private isHit: boolean = false;
+  private wasGrounded: boolean = false;
   private hitStunTimer: number = 0;
   private velocity: THREE.Vector3 = new THREE.Vector3();
+  private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
   private facing: number = 0;
   private worldCamera: THREE.Camera | null = null;
+  private footstepTimer: number = 0;
 
   private lastHitTargets: Set<any> = new Set();
 
@@ -123,7 +126,11 @@ export class PlayerController {
     this.animationManager.update(deltaTime);
     this.attackComponent.update();
 
+    this.wasGrounded = this.isGrounded;
     this.isGrounded = this.physicsWorld.isGrounded(this.bodyHandle);
+    if (!this.wasGrounded && this.isGrounded) {
+      this.onLand();
+    }
 
     if (this.isHit) {
       this.hitStunTimer -= deltaTime;
@@ -157,15 +164,17 @@ export class PlayerController {
       speed
     );
 
-    if (inputDirection.length() > 0.1) {
-      this.facing = Math.atan2(inputDirection.x, inputDirection.z);
+    if (this.velocity.lengthSq() > 0.05) {
+      this.facing = Math.atan2(this.velocity.x, this.velocity.z);
       const targetQuaternion = new THREE.Quaternion();
       targetQuaternion.setFromAxisAngle(
         new THREE.Vector3(0, 1, 0),
         this.facing
       );
-      this.model.quaternion.slerp(targetQuaternion, PLAYER.ROTATION_SPEED);
+      this.model.quaternion.slerp(targetQuaternion, 1 - Math.exp(-PLAYER.ROTATION_SPEED * deltaTime));
     }
+
+    this.updateFootsteps(deltaTime);
   }
 
   private getInputDirection(): THREE.Vector3 {
@@ -206,21 +215,32 @@ export class PlayerController {
       ? PLAYER.SPRINT_SPEED
       : PLAYER.SPEED;
 
-    const move = direction.clone().multiplyScalar(targetSpeed * deltaTime);
-    const nextPosition = this.model.position.clone().add(move);
-    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
-    nextPosition.x = VectorUtils.clamp(nextPosition.x, -halfArena, halfArena);
-    nextPosition.z = VectorUtils.clamp(nextPosition.z, -halfArena, halfArena);
+    const currentVelocity = this.physicsWorld.getVelocity(this.bodyHandle);
+    const horizontalVelocity = new THREE.Vector3(currentVelocity.x, 0, currentVelocity.z);
+    this.desiredVelocity.copy(direction).multiplyScalar(targetSpeed);
+    const response = direction.lengthSq() > 0
+      ? PLAYER.ACCELERATION
+      : PLAYER.DECELERATION;
 
-    this.model.position.copy(nextPosition);
-    this.physicsWorld.setPosition(this.bodyHandle, nextPosition);
-
-    this.velocity.set(
-      direction.x * targetSpeed,
-      0,
-      direction.z * targetSpeed
+    horizontalVelocity.lerp(
+      this.desiredVelocity,
+      1 - Math.exp(-response * deltaTime)
     );
-    this.physicsWorld.setVelocity(this.bodyHandle, this.velocity);
+
+    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
+    const position = this.physicsWorld.getPosition(this.bodyHandle);
+    if (Math.abs(position.x) > halfArena || Math.abs(position.z) > halfArena) {
+      position.x = VectorUtils.clamp(position.x, -halfArena, halfArena);
+      position.z = VectorUtils.clamp(position.z, -halfArena, halfArena);
+      this.physicsWorld.setPosition(this.bodyHandle, position);
+      horizontalVelocity.multiplyScalar(0.35);
+    }
+
+    this.velocity.set(horizontalVelocity.x, 0, horizontalVelocity.z);
+    this.physicsWorld.setVelocity(
+      this.bodyHandle,
+      new THREE.Vector3(horizontalVelocity.x, currentVelocity.y, horizontalVelocity.z)
+    );
   }
 
   private jump(): void {
@@ -273,6 +293,26 @@ export class PlayerController {
     console.log('Hit target!', target);
   }
 
+  private updateFootsteps(deltaTime: number): void {
+    const speed = this.velocity.length();
+    if (!this.isGrounded || speed < 1.2) {
+      this.footstepTimer = 0;
+      return;
+    }
+
+    this.footstepTimer -= deltaTime * speed;
+    if (this.footstepTimer <= 0) {
+      this.onFootstep();
+      this.footstepTimer = this.inputState.sprint ? 2.4 : 3.2;
+    }
+  }
+
+  private onFootstep(): void {
+  }
+
+  private onLand(): void {
+  }
+
   takeDamage(damageInfo: DamageInfo): void {
     this.healthComponent.takeDamage(damageInfo.damage);
     this.applyKnockback(damageInfo.knockbackDirection, damageInfo.knockback);
@@ -309,6 +349,14 @@ export class PlayerController {
 
   getBodyHandle(): RAPIER.RigidBodyHandle {
     return this.bodyHandle;
+  }
+
+  getSpeed(): number {
+    return this.velocity.length();
+  }
+
+  getSprintRatio(): number {
+    return this.inputState.sprint ? THREE.MathUtils.clamp(this.getSpeed() / PLAYER.SPRINT_SPEED, 0, 1) : 0;
   }
 
   cleanup(): void {

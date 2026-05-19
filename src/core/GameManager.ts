@@ -28,7 +28,7 @@ export class GameManager {
   constructor() {
     this.renderer = new Renderer();
     this.physicsWorld = new PhysicsWorld();
-    this.cameraController = new CameraController(this.renderer.getCamera());
+    this.cameraController = new CameraController(this.renderer.getCamera(), this.physicsWorld);
     this.uiSystem = new UISystem();
     this.arenaScene = new ArenaScene(this.renderer, this.physicsWorld);
   }
@@ -37,7 +37,6 @@ export class GameManager {
     console.log('Initializing game...');
 
     this.arenaScene.setup();
-    this.createObstacleCourse();
 
     this.createPlayer();
 
@@ -166,36 +165,10 @@ export class GameManager {
     parent.add(limb);
   }
 
-  private createObstacleCourse(): void {
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x70757f,
-      roughness: 0.85,
-      metalness: 0.05,
-    });
-
-    const obstacles = [
-      { position: new THREE.Vector3(-4, 0.6, -4), size: { width: 1.4, height: 1.2, depth: 5 } },
-      { position: new THREE.Vector3(4, 0.6, -2), size: { width: 1.4, height: 1.2, depth: 5 } },
-      { position: new THREE.Vector3(-3, 0.6, 3), size: { width: 5, height: 1.2, depth: 1.2 } },
-      { position: new THREE.Vector3(5.5, 0.6, 4.5), size: { width: 4, height: 1.2, depth: 1.2 } },
-      { position: new THREE.Vector3(-7, 0.6, 6), size: { width: 1.2, height: 1.2, depth: 4 } },
-      { position: new THREE.Vector3(0, 0.6, 0), size: { width: 1.6, height: 1.2, depth: 1.6 } },
-    ];
-
-    obstacles.forEach(({ position, size }) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.width, size.height, size.depth), material);
-      mesh.position.copy(position);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.renderer.add(mesh);
-      this.physicsWorld.createStaticBody(position, 'box', size);
-    });
-  }
-
   private createPlaceholderAnimations(): THREE.AnimationClip[] {
     const animations: THREE.AnimationClip[] = [];
 
-    const animationNames = ['idle', 'run', 'sprint', 'jump', 'attack', 'hit', 'death'];
+    const animationNames = ['idle', 'walk', 'run', 'sprint', 'jump', 'attack', 'hit', 'death'];
 
     animationNames.forEach((name) => {
       const scaleTrack = new THREE.VectorKeyframeTrack(
@@ -249,7 +222,7 @@ export class GameManager {
 
     this.enemy.update(deltaTime);
 
-    this.cameraController.update(this.player.getModel().position);
+    this.cameraController.update(this.player.getModel().position, this.player.getSprintRatio());
 
     const playerHealth = this.player.getHealth();
     const enemyHealth = this.enemy.getHealth();

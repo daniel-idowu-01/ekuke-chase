@@ -14,9 +14,8 @@ export class AnimationManager {
   private mixer: THREE.AnimationMixer;
   private animations: Map<string, THREE.AnimationAction> = new Map();
   private currentState: string = 'idle';
-  private isTransitioning: boolean = false;
   private transitionDuration: number = ANIMATION.FADE_DURATION;
-  private activeClips: Set<string> = new Set();
+  private activeAction: THREE.AnimationAction | null = null;
 
   constructor(model: THREE.Object3D, animations: THREE.AnimationClip[]) {
     this.mixer = new THREE.AnimationMixer(model);
@@ -33,7 +32,8 @@ export class AnimationManager {
     loop: typeof THREE.LoopOnce | typeof THREE.LoopRepeat | typeof THREE.LoopPingPong = THREE.LoopRepeat,
     fadeIn: boolean = true
   ): void {
-    if (this.currentState === stateName && !this.isTransitioning) {
+    if (this.currentState === stateName) {
+      this.setSpeed(stateName, speed);
       return;
     }
 
@@ -43,20 +43,18 @@ export class AnimationManager {
       return;
     }
 
-    if (fadeIn && this.activeClips.size > 0) {
-      this.activeClips.forEach((clip) => {
-        const currentAction = this.animations.get(clip);
-        if (currentAction && currentAction !== action) {
-          currentAction.fadeOut(this.transitionDuration);
-        }
-      });
-    } else {
+    if (fadeIn && this.activeAction && this.activeAction !== action) {
+      this.activeAction.fadeOut(this.transitionDuration);
+    } else if (!fadeIn) {
       this.mixer.stopAllAction();
     }
 
+    action.reset();
     action.loop = loop;
     action.clampWhenFinished = loop === THREE.LoopOnce;
     action.timeScale = speed;
+    action.enabled = true;
+    action.setEffectiveWeight(1);
 
     if (fadeIn) {
       action.fadeIn(this.transitionDuration);
@@ -65,9 +63,8 @@ export class AnimationManager {
     }
 
     action.play();
-    this.activeClips.add(stateName);
+    this.activeAction = action;
     this.currentState = stateName;
-    this.isTransitioning = false;
   }
 
   getCurrentState(): string {
@@ -114,13 +111,15 @@ export class AnimationManager {
       } else {
         action.stop();
       }
-      this.activeClips.delete(stateName);
+      if (this.activeAction === action) {
+        this.activeAction = null;
+      }
     }
   }
 
   stopAll(): void {
     this.mixer.stopAllAction();
-    this.activeClips.clear();
+    this.activeAction = null;
   }
 
   update(deltaTime: number): void {
@@ -163,7 +162,13 @@ export class CharacterAnimationStateMachine {
     } else if (isJumping) {
       nextState = 'jump';
     } else if (isMoving) {
-      nextState = isSprinting ? 'sprint' : 'run';
+      if (isSprinting || speed > 7.5) {
+        nextState = 'sprint';
+      } else if (speed > 3.25) {
+        nextState = 'run';
+      } else {
+        nextState = 'walk';
+      }
     } else {
       nextState = 'idle';
     }
@@ -172,12 +177,17 @@ export class CharacterAnimationStateMachine {
       this.transitionTo(nextState);
     }
 
-    if (nextState === 'run' || nextState === 'sprint') {
-      const maxSpeed = isSprinting ? 15 : 8;
+    if (nextState === 'walk' || nextState === 'run' || nextState === 'sprint') {
+      const maxSpeed = isSprinting ? 11 : 7;
       const speedRatio = Math.min(speed / maxSpeed, 1);
+      const baseSpeed = nextState === 'walk'
+        ? ANIMATION.WALK_SPEED
+        : nextState === 'sprint'
+          ? ANIMATION.SPRINT_SPEED
+          : ANIMATION.RUN_SPEED;
       this.animationManager.setSpeed(
         nextState,
-        isSprinting ? ANIMATION.SPRINT_SPEED : ANIMATION.RUN_SPEED * speedRatio
+        THREE.MathUtils.clamp(baseSpeed * (0.75 + speedRatio * 0.45), 0.75, 2.25)
       );
     }
   }

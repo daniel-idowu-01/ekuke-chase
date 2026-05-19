@@ -29,12 +29,14 @@ export class EnemyController {
   private currentState: EnemyStateType = EnemyState.IDLE;
   private target: any = null;
   private velocity: THREE.Vector3 = new THREE.Vector3();
+  private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
   private facing: number = 0;
 
   private isGrounded: boolean = false;
   private isAttacking: boolean = false;
   private isHit: boolean = false;
   private hitStunTimer: number = 0;
+  private attackWindupTimer: number = 0;
 
   constructor(
     model: THREE.Object3D,
@@ -79,7 +81,7 @@ export class EnemyController {
       }
     }
 
-    this.updateAIState();
+    this.updateAIState(deltaTime);
 
     this.isAttacking = this.attackComponent.getIsAttacking();
     const speed = this.velocity.length();
@@ -91,10 +93,7 @@ export class EnemyController {
       speed
     );
 
-    if (
-      this.currentState === EnemyState.CHASE ||
-      this.currentState === EnemyState.ATTACK
-    ) {
+    if (this.currentState === EnemyState.CHASE || this.currentState === EnemyState.ATTACK) {
       if (this.target) {
         const dirToTarget = this.target
           .getWorldPosition()
@@ -109,13 +108,13 @@ export class EnemyController {
             new THREE.Vector3(0, 1, 0),
             this.facing
           );
-          this.model.quaternion.slerp(targetQuaternion, 0.1);
+          this.model.quaternion.slerp(targetQuaternion, 1 - Math.exp(-ENEMY.ROTATION_SPEED * deltaTime));
         }
       }
     }
   }
 
-  private updateAIState(): void {
+  private updateAIState(deltaTime: number): void {
     if (this.healthComponent.getIsDead()) {
       this.currentState = EnemyState.DEAD;
       return;
@@ -132,13 +131,13 @@ export class EnemyController {
 
     switch (this.currentState) {
       case EnemyState.IDLE:
-        this.updateIdle(distanceToTarget);
+        this.updateIdle(distanceToTarget, deltaTime);
         break;
       case EnemyState.CHASE:
-        this.updateChase(distanceToTarget);
+        this.updateChase(distanceToTarget, deltaTime);
         break;
       case EnemyState.ATTACK:
-        this.updateAttack(distanceToTarget);
+        this.updateAttack(distanceToTarget, deltaTime);
         break;
       case EnemyState.HIT:
         if (!this.isHit) {
@@ -150,16 +149,15 @@ export class EnemyController {
     }
   }
 
-  private updateIdle(distanceToTarget: number): void {
-    this.physicsWorld.setVelocity(this.bodyHandle, new THREE.Vector3(0, this.velocity.y, 0));
-    this.velocity = new THREE.Vector3(0, this.velocity.y, 0);
+  private updateIdle(distanceToTarget: number, deltaTime: number): void {
+    this.applyHorizontalVelocity(new THREE.Vector3(), deltaTime, ENEMY.DECELERATION);
 
     if (this.target && distanceToTarget < ENEMY.DETECTION_RADIUS) {
       this.currentState = EnemyState.CHASE;
     }
   }
 
-  private updateChase(distanceToTarget: number): void {
+  private updateChase(distanceToTarget: number, deltaTime: number): void {
     if (!this.target) {
       this.currentState = EnemyState.IDLE;
       return;
@@ -177,35 +175,58 @@ export class EnemyController {
     dirToTarget.y = 0;
     dirToTarget.normalize();
 
-    const move = dirToTarget.clone().multiplyScalar(ENEMY.SPEED * 0.65 * (1 / 60));
-    const nextPosition = this.model.position.clone().add(move);
-    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
-    nextPosition.x = THREE.MathUtils.clamp(nextPosition.x, -halfArena, halfArena);
-    nextPosition.z = THREE.MathUtils.clamp(nextPosition.z, -halfArena, halfArena);
-
-    this.model.position.copy(nextPosition);
-    this.physicsWorld.setPosition(this.bodyHandle, nextPosition);
-    this.velocity.copy(dirToTarget).multiplyScalar(ENEMY.SPEED * 0.65);
-    this.physicsWorld.setVelocity(this.bodyHandle, this.velocity);
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.model.quaternion);
+    forward.y = 0;
+    forward.normalize();
+    const alignment = THREE.MathUtils.clamp((forward.dot(dirToTarget) + 1) * 0.5, 0.25, 1);
+    this.desiredVelocity.copy(dirToTarget).multiplyScalar(ENEMY.SPEED * alignment);
+    this.applyHorizontalVelocity(this.desiredVelocity, deltaTime, ENEMY.ACCELERATION);
   }
 
-  private updateAttack(distanceToTarget: number): void {
+  private updateAttack(distanceToTarget: number, deltaTime: number): void {
     if (!this.target) {
       this.currentState = EnemyState.IDLE;
       return;
     }
 
-    this.physicsWorld.setVelocity(this.bodyHandle, new THREE.Vector3(0, this.velocity.y, 0));
-    this.velocity = new THREE.Vector3(0, this.velocity.y, 0);
+    this.applyHorizontalVelocity(new THREE.Vector3(), deltaTime, ENEMY.DECELERATION);
 
     if (distanceToTarget > ENEMY.ATTACK_RANGE + 2) {
       this.currentState = EnemyState.CHASE;
+      this.attackWindupTimer = 0;
       return;
     }
 
     if (this.attackComponent.canAttack()) {
-      this.performAttack();
+      this.attackWindupTimer += deltaTime;
+      if (this.attackWindupTimer >= ENEMY.ATTACK_WINDUP) {
+        this.performAttack();
+        this.attackWindupTimer = 0;
+      }
+    } else {
+      this.attackWindupTimer = 0;
     }
+  }
+
+  private applyHorizontalVelocity(targetVelocity: THREE.Vector3, deltaTime: number, response: number): void {
+    const currentVelocity = this.physicsWorld.getVelocity(this.bodyHandle);
+    const horizontalVelocity = new THREE.Vector3(currentVelocity.x, 0, currentVelocity.z);
+    horizontalVelocity.lerp(targetVelocity, 1 - Math.exp(-response * deltaTime));
+
+    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
+    const position = this.physicsWorld.getPosition(this.bodyHandle);
+    if (Math.abs(position.x) > halfArena || Math.abs(position.z) > halfArena) {
+      position.x = THREE.MathUtils.clamp(position.x, -halfArena, halfArena);
+      position.z = THREE.MathUtils.clamp(position.z, -halfArena, halfArena);
+      this.physicsWorld.setPosition(this.bodyHandle, position);
+      horizontalVelocity.multiplyScalar(0.35);
+    }
+
+    this.velocity.set(horizontalVelocity.x, 0, horizontalVelocity.z);
+    this.physicsWorld.setVelocity(
+      this.bodyHandle,
+      new THREE.Vector3(horizontalVelocity.x, currentVelocity.y, horizontalVelocity.z)
+    );
   }
 
   private performAttack(): void {

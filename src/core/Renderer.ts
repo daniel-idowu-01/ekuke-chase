@@ -17,7 +17,7 @@ export class Renderer {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(SCENE.BACKGROUND_COLOR);
-    this.scene.fog = new THREE.Fog(SCENE.BACKGROUND_COLOR, 50, 200);
+    this.scene.fog = new THREE.FogExp2(0x1c2430, 0.035);
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -29,24 +29,26 @@ export class Renderer {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
     const app = document.querySelector<HTMLDivElement>('#app');
     (app || document.body).appendChild(this.renderer.domElement);
 
     this.ambientLight = new THREE.AmbientLight(
-      0xffffff,
+      0x9eb1c8,
       SCENE.AMBIENT_INTENSITY
     );
     this.scene.add(this.ambientLight);
 
     this.directionalLight = new THREE.DirectionalLight(
-      0xffffff,
+      0xffc982,
       SCENE.LIGHT_INTENSITY
     );
-    this.directionalLight.position.set(15, 15, 15);
+    this.directionalLight.position.set(-12, 18, 10);
     this.directionalLight.castShadow = true;
     this.directionalLight.shadow.mapSize.width = SCENE.SHADOW_MAP_SIZE;
     this.directionalLight.shadow.mapSize.height = SCENE.SHADOW_MAP_SIZE;

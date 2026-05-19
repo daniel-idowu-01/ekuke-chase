@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { CAMERA } from '../utils/Constants';
+import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { VectorUtils } from '../utils/VectorUtils';
 
 
 export class CameraController {
   private camera: THREE.PerspectiveCamera;
+  private physicsWorld: PhysicsWorld;
   private targetPosition: THREE.Vector3 = new THREE.Vector3();
   private targetLookAt: THREE.Vector3 = new THREE.Vector3();
+  private currentLookAt: THREE.Vector3 = new THREE.Vector3();
   private targetDistance: number = CAMERA.DISTANCE;
   private currentDistance: number = CAMERA.DISTANCE;
   private pitch: number = -0.35;
@@ -24,8 +27,9 @@ export class CameraController {
   private shakeIntensity: number = 0;
   private shakeTimer: number = 0;
 
-  constructor(camera: THREE.PerspectiveCamera) {
+  constructor(camera: THREE.PerspectiveCamera, physicsWorld: PhysicsWorld) {
     this.camera = camera;
+    this.physicsWorld = physicsWorld;
     this.setupMouseInput();
   }
 
@@ -116,7 +120,7 @@ export class CameraController {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  update(playerPos?: THREE.Vector3): void {
+  update(playerPos?: THREE.Vector3, sprintRatio: number = 0): void {
     if (!this.targetPlayer && !playerPos) {
       return;
     }
@@ -124,6 +128,7 @@ export class CameraController {
     const followPos = playerPos || this.targetPlayer!.position;
 
     this.updateKeyboardOrbit();
+    this.targetDistance = THREE.MathUtils.lerp(CAMERA.DISTANCE, CAMERA.SPRINT_DISTANCE, sprintRatio);
 
     const cameraOffset = new THREE.Vector3(
       Math.sin(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
@@ -132,6 +137,7 @@ export class CameraController {
     );
 
     this.targetPosition = followPos.clone().add(cameraOffset);
+    this.targetPosition = this.resolveCameraCollision(followPos, this.targetPosition);
 
     const lookAheadDir = new THREE.Vector3(
       Math.sin(this.yaw),
@@ -143,14 +149,20 @@ export class CameraController {
       .addScaledVector(lookAheadDir, -CAMERA.LOOK_AHEAD)
       .add(new THREE.Vector3(0, CAMERA.HEIGHT * 0.5, 0));
 
-    this.camera.position.lerp(this.targetPosition, CAMERA.SMOOTHING);
-    this.camera.lookAt(this.targetLookAt);
+    this.camera.position.lerp(this.targetPosition, 1 - Math.exp(-7 * CAMERA.SMOOTHING));
+    this.currentLookAt.lerp(this.targetLookAt, 0.12);
+    this.camera.lookAt(this.currentLookAt);
 
     this.currentDistance = THREE.MathUtils.lerp(
       this.currentDistance,
       this.targetDistance,
       CAMERA.SMOOTHING
     );
+
+    if (sprintRatio > 0.65) {
+      this.shakeIntensity = Math.max(this.shakeIntensity, CAMERA.SHAKE_INTENSITY * 0.35 * sprintRatio);
+      this.shakeTimer = Math.max(this.shakeTimer, 0.08);
+    }
 
     this.updateShake();
   }
@@ -188,6 +200,19 @@ export class CameraController {
     if (this.keyState.tiltDown) {
       this.pitch = VectorUtils.clamp(this.pitch - tiltSpeed, CAMERA.MIN_PITCH, CAMERA.MAX_PITCH);
     }
+  }
+
+  private resolveCameraCollision(followPos: THREE.Vector3, desiredPosition: THREE.Vector3): THREE.Vector3 {
+    const origin = followPos.clone().add(new THREE.Vector3(0, 1, 0));
+    const toCamera = desiredPosition.clone().sub(origin);
+    const distance = toCamera.length();
+    if (distance <= 0.01) return desiredPosition;
+
+    const direction = toCamera.normalize();
+    const hit = this.physicsWorld.raycast(origin, direction, distance);
+    if (!hit || hit.toi > distance) return desiredPosition;
+
+    return origin.add(direction.multiplyScalar(Math.max(1.2, hit.toi - 0.25)));
   }
 
   setPitch(pitch: number): void {

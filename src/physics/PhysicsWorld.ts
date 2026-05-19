@@ -22,7 +22,9 @@ export class PhysicsWorld {
     const rigidBodyDesc =
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(position.x, position.y, position.z)
-        .setLinearDamping(0.5);
+        .setLinearDamping(1.8)
+        .setAngularDamping(8)
+        .lockRotations();
 
     const rigidBody = this.world.createRigidBody(rigidBodyDesc);
 
@@ -69,6 +71,12 @@ export class PhysicsWorld {
 
     this.world.createCollider(colliderDesc, rigidBody);
 
+    return rigidBody.handle;
+  }
+
+  createStaticTrimesh(vertices: Float32Array, indices: Uint32Array): RAPIER.RigidBodyHandle {
+    const rigidBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    this.world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices), rigidBody);
     return rigidBody.handle;
   }
 
@@ -165,7 +173,12 @@ export class PhysicsWorld {
     if (!body) return false;
 
     const pos = body.translation();
-    return pos.y < 1;
+    const ray = new RAPIER.Ray(
+      new RAPIER.Vector3(pos.x, pos.y, pos.z),
+      new RAPIER.Vector3(0, -1, 0)
+    );
+    const hit = this.world.castRay(ray, 1.15, true);
+    return hit !== null;
   }
 
   update(): void {
@@ -175,10 +188,7 @@ export class PhysicsWorld {
       const body = this.world.getRigidBody(bodyHandle);
       if (body) {
         const pos = body.translation();
-        const rot = body.rotation();
-
         object.position.set(pos.x, pos.y, pos.z);
-        object.quaternion.set(rot.x, rot.y, rot.z, rot.w);
       }
     }
   }
