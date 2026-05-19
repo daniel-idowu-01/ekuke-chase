@@ -75,15 +75,19 @@ export class PlayerController {
       const key = e.key.toLowerCase();
       switch (key) {
         case 'w':
+        case 'arrowup':
           this.inputState.moveForward = true;
           break;
         case 's':
+        case 'arrowdown':
           this.inputState.moveBackward = true;
           break;
         case 'a':
+        case 'arrowleft':
           this.inputState.moveLeft = true;
           break;
         case 'd':
+        case 'arrowright':
           this.inputState.moveRight = true;
           break;
         case 'shift':
@@ -100,15 +104,19 @@ export class PlayerController {
       const key = e.key.toLowerCase();
       switch (key) {
         case 'w':
+        case 'arrowup':
           this.inputState.moveForward = false;
           break;
         case 's':
+        case 'arrowdown':
           this.inputState.moveBackward = false;
           break;
         case 'a':
+        case 'arrowleft':
           this.inputState.moveLeft = false;
           break;
         case 'd':
+        case 'arrowright':
           this.inputState.moveRight = false;
           break;
         case 'shift':

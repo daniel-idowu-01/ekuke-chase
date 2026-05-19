@@ -71,18 +71,16 @@ export class CameraController {
 
     document.addEventListener('keydown', (e) => {
       switch (e.key.toLowerCase()) {
-        case 'arrowleft':
         case 'q':
           this.keyState.rotateLeft = true;
           break;
-        case 'arrowright':
         case 'e':
           this.keyState.rotateRight = true;
           break;
-        case 'arrowup':
+        case 'r':
           this.keyState.tiltUp = true;
           break;
-        case 'arrowdown':
+        case 'f':
           this.keyState.tiltDown = true;
           break;
       }
@@ -90,18 +88,16 @@ export class CameraController {
 
     document.addEventListener('keyup', (e) => {
       switch (e.key.toLowerCase()) {
-        case 'arrowleft':
         case 'q':
           this.keyState.rotateLeft = false;
           break;
-        case 'arrowright':
         case 'e':
           this.keyState.rotateRight = false;
           break;
-        case 'arrowup':
+        case 'r':
           this.keyState.tiltUp = false;
           break;
-        case 'arrowdown':
+        case 'f':
           this.keyState.tiltDown = false;
           break;
       }
