@@ -128,6 +128,7 @@ export class UISystem {
     screen.style.justifyContent = 'center';
     screen.style.alignItems = 'center';
     screen.style.zIndex = '1000';
+    screen.style.pointerEvents = 'auto';
 
     const title = document.createElement('h1');
     title.textContent = 'GAME OVER';
@@ -151,6 +152,7 @@ export class UISystem {
     restartButton.style.borderRadius = '4px';
     restartButton.style.cursor = 'pointer';
     restartButton.style.fontWeight = 'bold';
+    restartButton.style.pointerEvents = 'auto';
 
     screen.appendChild(title);
     screen.appendChild(message);

@@ -263,10 +263,12 @@ export class GameManager {
     console.log('Restarting game...');
 
     if (this.player) {
+      this.physicsWorld.destroyLinkedBody(this.player.getModel());
       this.renderer.remove(this.player.getModel());
       this.player.cleanup();
     }
     if (this.enemy) {
+      this.physicsWorld.destroyLinkedBody(this.enemy.getModel());
       this.renderer.remove(this.enemy.getModel());
     }
 

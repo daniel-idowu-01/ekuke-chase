@@ -235,4 +235,13 @@ export class PhysicsWorld {
       this.world.removeRigidBody(body);
     }
   }
+
+  destroyLinkedBody(object: THREE.Object3D): void {
+    const bodyHandle = this.bodyHandles.get(object);
+    if (bodyHandle === undefined) return;
+
+    this.destroyBody(bodyHandle);
+    this.bodyHandles.delete(object);
+    this.bodies.delete(bodyHandle);
+  }
 }
