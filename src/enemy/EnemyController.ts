@@ -49,7 +49,7 @@ export class EnemyController {
     this.animationManager = animationManager;
     this.animationStateMachine = new CharacterAnimationStateMachine(animationManager);
 
-    this.bodyHandle = physicsWorld.createDynamicBody(position, ENEMY.MASS, 'capsule');
+    this.bodyHandle = physicsWorld.createDynamicBody(position, ENEMY.MASS, 'dog');
     physicsWorld.linkBody(model, this.bodyHandle);
 
     this.healthComponent = new HealthComponent(ENEMY.MAX_HEALTH);

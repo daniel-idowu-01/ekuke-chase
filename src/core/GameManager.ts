@@ -50,7 +50,7 @@ export class GameManager {
 
   private createPlayer(): void {
     const playerMesh = this.createHumanModel();
-    playerMesh.position.set(0, 1, -8);
+    playerMesh.position.set(0, 0.7, -8);
 
     this.renderer.add(playerMesh);
 
@@ -68,7 +68,7 @@ export class GameManager {
 
   private createEnemy(): void {
     const enemyMesh = this.createDogModel();
-    enemyMesh.position.set(0, 0.8, 8);
+    enemyMesh.position.set(0, 0.45, 8);
 
     this.renderer.add(enemyMesh);
 
@@ -93,19 +93,23 @@ export class GameManager {
     const shoe = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
 
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.75, 6, 12), shirt);
+    torso.name = 'torso';
     torso.position.y = 0.65;
     human.add(torso);
 
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), skin);
+    head.name = 'head';
     head.position.y = 1.35;
     human.add(head);
 
-    this.addLimb(human, new THREE.Vector3(-0.24, 0.7, 0), new THREE.Vector3(0.1, 0.55, 0.1), skin);
-    this.addLimb(human, new THREE.Vector3(0.24, 0.7, 0), new THREE.Vector3(0.1, 0.55, 0.1), skin);
-    this.addLimb(human, new THREE.Vector3(-0.12, 0.05, 0), new THREE.Vector3(0.12, 0.7, 0.12), pants);
-    this.addLimb(human, new THREE.Vector3(0.12, 0.05, 0), new THREE.Vector3(0.12, 0.7, 0.12), pants);
-    this.addLimb(human, new THREE.Vector3(-0.12, -0.34, -0.04), new THREE.Vector3(0.18, 0.08, 0.28), shoe);
-    this.addLimb(human, new THREE.Vector3(0.12, -0.34, -0.04), new THREE.Vector3(0.18, 0.08, 0.28), shoe);
+    this.addLimb(human, 'leftArm', new THREE.Vector3(-0.26, 0.67, 0), new THREE.Vector3(0.1, 0.52, 0.1), skin);
+    this.addLimb(human, 'rightArm', new THREE.Vector3(0.26, 0.67, 0), new THREE.Vector3(0.1, 0.52, 0.1), skin);
+    this.addLimb(human, 'leftLeg', new THREE.Vector3(-0.11, 0.05, 0), new THREE.Vector3(0.11, 0.62, 0.11), pants);
+    this.addLimb(human, 'rightLeg', new THREE.Vector3(0.11, 0.05, 0), new THREE.Vector3(0.11, 0.62, 0.11), pants);
+    this.addLimb(human, 'leftFoot', new THREE.Vector3(-0.11, -0.3, -0.04), new THREE.Vector3(0.16, 0.07, 0.24), shoe);
+    this.addLimb(human, 'rightFoot', new THREE.Vector3(0.11, -0.3, -0.04), new THREE.Vector3(0.16, 0.07, 0.24), shoe);
+
+    human.scale.setScalar(0.72);
 
     human.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -123,26 +127,32 @@ export class GameManager {
     const darkFur = new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: 0.8 });
 
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.38, 0.42), fur);
+    body.name = 'dogBody';
     body.position.y = 0.25;
     dog.add(body);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.32), fur);
+    head.name = 'dogHead';
     head.position.set(0, 0.42, -0.48);
     dog.add(head);
 
     const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.22), darkFur);
+    snout.name = 'dogSnout';
     snout.position.set(0, 0.38, -0.74);
     dog.add(snout);
 
-    this.addLimb(dog, new THREE.Vector3(-0.32, -0.08, -0.2), new THREE.Vector3(0.12, 0.42, 0.12), fur);
-    this.addLimb(dog, new THREE.Vector3(0.32, -0.08, -0.2), new THREE.Vector3(0.12, 0.42, 0.12), fur);
-    this.addLimb(dog, new THREE.Vector3(-0.32, -0.08, 0.22), new THREE.Vector3(0.12, 0.42, 0.12), fur);
-    this.addLimb(dog, new THREE.Vector3(0.32, -0.08, 0.22), new THREE.Vector3(0.12, 0.42, 0.12), fur);
+    this.addLimb(dog, 'frontLeftLeg', new THREE.Vector3(-0.32, -0.08, -0.2), new THREE.Vector3(0.1, 0.36, 0.1), fur);
+    this.addLimb(dog, 'frontRightLeg', new THREE.Vector3(0.32, -0.08, -0.2), new THREE.Vector3(0.1, 0.36, 0.1), fur);
+    this.addLimb(dog, 'backLeftLeg', new THREE.Vector3(-0.32, -0.08, 0.22), new THREE.Vector3(0.1, 0.36, 0.1), fur);
+    this.addLimb(dog, 'backRightLeg', new THREE.Vector3(0.32, -0.08, 0.22), new THREE.Vector3(0.1, 0.36, 0.1), fur);
 
     const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.38, 4, 8), fur);
+    tail.name = 'dogTail';
     tail.position.set(0, 0.42, 0.52);
     tail.rotation.x = Math.PI / 3;
     dog.add(tail);
+
+    dog.scale.setScalar(0.62);
 
     dog.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -156,11 +166,13 @@ export class GameManager {
 
   private addLimb(
     parent: THREE.Object3D,
+    name: string,
     position: THREE.Vector3,
     scale: THREE.Vector3,
     material: THREE.Material
   ): void {
     const limb = new THREE.Mesh(new THREE.BoxGeometry(scale.x, scale.y, scale.z), material);
+    limb.name = name;
     limb.position.copy(position);
     parent.add(limb);
   }
@@ -171,17 +183,68 @@ export class GameManager {
     const animationNames = ['idle', 'walk', 'run', 'sprint', 'jump', 'attack', 'hit', 'death'];
 
     animationNames.forEach((name) => {
-      const scaleTrack = new THREE.VectorKeyframeTrack(
-        '.scale',
-        [0, 0.5, 1],
-        [1, 1, 1, 1.04, 0.96, 1.04, 1, 1, 1]
-      );
-
-      const clip = new THREE.AnimationClip(name, 1, [scaleTrack]);
-      animations.push(clip);
+      animations.push(this.createProceduralClip(name));
     });
 
     return animations;
+  }
+
+  private createProceduralClip(name: string): THREE.AnimationClip {
+    const times = [0, 0.25, 0.5, 0.75, 1];
+    const rest = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const walkA = [0.42, 0, -0.42, 0, 0.42];
+    const walkB = [-0.42, 0, 0.42, 0, -0.42];
+    const runA = [0.72, 0, -0.72, 0, 0.72];
+    const runB = [-0.72, 0, 0.72, 0, -0.72];
+    const dogA = [0.5, -0.2, -0.5, 0.2, 0.5];
+    const dogB = [-0.5, 0.2, 0.5, -0.2, -0.5];
+    const tracks: THREE.KeyframeTrack[] = [];
+
+    const addRotation = (target: string, values: number[]) => {
+      tracks.push(new THREE.NumberKeyframeTrack(`${target}.rotation[x]`, times, values));
+    };
+
+    const moving = name === 'walk' || name === 'run' || name === 'sprint';
+    const attack = name === 'attack';
+    const hit = name === 'hit';
+    const death = name === 'death';
+    const ampA = name === 'walk' ? walkA : runA;
+    const ampB = name === 'walk' ? walkB : runB;
+
+    if (moving) {
+      addRotation('leftLeg', ampA);
+      addRotation('rightLeg', ampB);
+      addRotation('leftArm', ampB.map((value) => value * 0.75));
+      addRotation('rightArm', ampA.map((value) => value * 0.75));
+      addRotation('frontLeftLeg', dogA);
+      addRotation('backRightLeg', dogA);
+      addRotation('frontRightLeg', dogB);
+      addRotation('backLeftLeg', dogB);
+      tracks.push(new THREE.NumberKeyframeTrack('torso.position[y]', times, [0.65, 0.68, 0.65, 0.68, 0.65]));
+      tracks.push(new THREE.NumberKeyframeTrack('dogBody.position[y]', times, [0.25, 0.29, 0.25, 0.29, 0.25]));
+      addRotation('dogTail', [0.75, 0.9, 0.75, 0.6, 0.75]);
+    } else if (attack) {
+      addRotation('leftArm', [-0.3, -0.8, -0.2, 0, -0.3]);
+      addRotation('rightArm', [-0.2, -0.9, -0.25, 0, -0.2]);
+      addRotation('dogHead', [0, -0.35, 0.18, 0, 0]);
+    } else if (hit) {
+      tracks.push(new THREE.NumberKeyframeTrack('.rotation[z]', times, [0, 0.08, -0.05, 0.02, 0]));
+    } else if (death) {
+      tracks.push(new THREE.NumberKeyframeTrack('.rotation[x]', times, [0, 0.5, 1.15, 1.35, 1.35]));
+    } else {
+      addRotation('leftLeg', rest);
+      addRotation('rightLeg', rest);
+      addRotation('leftArm', rest);
+      addRotation('rightArm', rest);
+      addRotation('frontLeftLeg', rest);
+      addRotation('frontRightLeg', rest);
+      addRotation('backLeftLeg', rest);
+      addRotation('backRightLeg', rest);
+      tracks.push(new THREE.NumberKeyframeTrack('torso.position[y]', times, [0.65, 0.67, 0.65, 0.66, 0.65]));
+      tracks.push(new THREE.NumberKeyframeTrack('dogBody.position[y]', times, [0.25, 0.27, 0.25, 0.26, 0.25]));
+    }
+
+    return new THREE.AnimationClip(name, 1, tracks);
   }
 
   private start(): void {

@@ -17,7 +17,7 @@ export class PhysicsWorld {
   createDynamicBody(
     position: THREE.Vector3,
     mass: number = 1,
-    shape: 'capsule' | 'box' | 'sphere' = 'capsule'
+    shape: 'capsule' | 'box' | 'sphere' | 'dog' = 'capsule'
   ): RAPIER.RigidBodyHandle {
     const rigidBodyDesc =
       RAPIER.RigidBodyDesc.dynamic()
@@ -30,7 +30,9 @@ export class PhysicsWorld {
 
     let colliderDesc: RAPIER.ColliderDesc;
     if (shape === 'capsule') {
-      colliderDesc = RAPIER.ColliderDesc.capsule(0.7, 0.3);
+      colliderDesc = RAPIER.ColliderDesc.capsule(0.45, 0.22);
+    } else if (shape === 'dog') {
+      colliderDesc = RAPIER.ColliderDesc.cuboid(0.34, 0.26, 0.5);
     } else if (shape === 'sphere') {
       colliderDesc = RAPIER.ColliderDesc.ball(0.5);
     } else {
