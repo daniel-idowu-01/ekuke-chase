@@ -1,215 +1,83 @@
-import * as THREE from 'three';
-import { COMBAT } from '../utils/Constants';
+// NOTE: This file used to hold the combat system (Health/Attack/damage).
+// The game pivoted to a pure survive/evade chase, so combat was stripped.
+// The depletable-resource component pattern is repurposed here as the
+// player's sprint stamina. The folder name is kept for now to limit churn;
+// it can be renamed (e.g. to `components/`) in a later pass.
 
-export interface CombatEvent {
-  type: 'attack' | 'hit' | 'kill';
-  attacker: any;
-  defender: any;
-  damage: number;
-  knockback?: THREE.Vector3;
-}
-
-export interface DamageInfo {
-  damage: number;
-  knockback: number;
-  knockbackDirection: THREE.Vector3;
-  stun: number;
-}
-
-
-export class CombatSystem {
-  private combatEventListeners: ((event: CombatEvent) => void)[] = [];
-
-  onCombatEvent(callback: (event: CombatEvent) => void): void {
-    this.combatEventListeners.push(callback);
-  }
-
-  private emitEvent(event: CombatEvent): void {
-    this.combatEventListeners.forEach((callback) => callback(event));
-  }
-
-  attack(): void {
-    const targets = this.findTargetsInRange();
-
-    targets.forEach((target) => {
-      const damage: DamageInfo = {
-        damage: 0,
-        knockback: 0,
-        knockbackDirection: new THREE.Vector3(0, 0, 1),
-        stun: COMBAT.HITSTUN_DURATION,
-      };
-
-      target.takeDamage(damage);
-
-      this.emitEvent({
-        type: 'hit',
-        attacker: null,
-        defender: target,
-        damage: 0,
-        knockback: damage.knockbackDirection,
-      });
-    });
-  }
-
-  private findTargetsInRange(): any[] {
-    return [];
-  }
-
-  applyDamage(character: any, damageInfo: DamageInfo): void {
-    character.takeDamage(damageInfo);
-  }
-}
-
-
-export class HealthComponent {
-  private maxHealth: number;
-  private currentHealth: number;
-  private isDead: boolean = false;
-  private deathCallbacks: (() => void)[] = [];
-  private damageCallbacks: ((damage: number) => void)[] = [];
-
-  constructor(maxHealth: number) {
-    this.maxHealth = maxHealth;
-    this.currentHealth = maxHealth;
-  }
-
-  takeDamage(amount: number): void {
-    if (this.isDead) return;
-
-    this.currentHealth = Math.max(0, this.currentHealth - amount);
-
-    this.damageCallbacks.forEach((cb) => cb(amount));
-
-    if (this.currentHealth <= 0) {
-      this.die();
-    }
-  }
-
-  heal(amount: number): void {
-    this.currentHealth = Math.min(this.maxHealth, this.currentHealth + amount);
-  }
-
-  private die(): void {
-    if (this.isDead) return;
-    this.isDead = true;
-    this.deathCallbacks.forEach((cb) => cb());
-  }
-
-  getIsDead(): boolean {
-    return this.isDead;
-  }
-
-  getHealthRatio(): number {
-    return this.currentHealth / this.maxHealth;
-  }
-
-  getCurrentHealth(): number {
-    return this.currentHealth;
-  }
-
-  getMaxHealth(): number {
-    return this.maxHealth;
-  }
-
-  onDeath(callback: () => void): void {
-    this.deathCallbacks.push(callback);
-  }
-
-  onDamage(callback: (damage: number) => void): void {
-    this.damageCallbacks.push(callback);
-  }
-
-  revive(): void {
-    this.isDead = false;
-    this.currentHealth = this.maxHealth;
-  }
-}
-
-
-export class AttackComponent {
-  private attackRange: number;
-  private attackDamage: number;
-  private attackKnockback: number;
-  private attackCooldown: number;
-  private lastAttackTime: number = 0;
-  private isAttacking: boolean = false;
-  private attackDuration: number;
-  private attackStartTime: number = 0;
-  private comboCount: number = 0;
-  private lastComboTime: number = 0;
+/**
+ * Drives the player's sprint stamina: drains while sprinting, regenerates
+ * after a short delay when not. Once fully drained the player becomes
+ * "exhausted" and cannot sprint again until stamina recovers past a
+ * threshold — this stops sprint from being tapped on/off every frame at 0.
+ */
+export class StaminaComponent {
+  private max: number;
+  private current: number;
+  private drainRate: number;
+  private regenRate: number;
+  private regenDelay: number;
+  private recoverThreshold: number;
+  private timeSinceDrain: number = 0;
+  private exhausted: boolean = false;
 
   constructor(
-    range: number = COMBAT.ATTACK_RANGE,
-    damage: number = COMBAT.ATTACK_DAMAGE,
-    knockback: number = COMBAT.ATTACK_KNOCKBACK,
-    cooldown: number = COMBAT.ATTACK_COOLDOWN,
-    attackDuration: number = COMBAT.ATTACK_DURATION
+    max: number,
+    drainRate: number,
+    regenRate: number,
+    regenDelay: number,
+    recoverThreshold: number
   ) {
-    this.attackRange = range;
-    this.attackDamage = damage;
-    this.attackKnockback = knockback;
-    this.attackCooldown = cooldown;
-    this.attackDuration = attackDuration;
+    this.max = max;
+    this.current = max;
+    this.drainRate = drainRate;
+    this.regenRate = regenRate;
+    this.regenDelay = regenDelay;
+    this.recoverThreshold = recoverThreshold;
   }
 
-  canAttack(): boolean {
-    return Date.now() - this.lastAttackTime > this.attackCooldown * 1000;
+  /** Whether sprinting is currently allowed (has stamina and not exhausted). */
+  canSprint(): boolean {
+    return !this.exhausted && this.current > 0;
   }
 
-  performAttack(): void {
-    if (!this.canAttack()) return;
+  /**
+   * Advance stamina one step. `wantSprint` is the raw player intent; the
+   * returned boolean is whether the player is *actually* sprinting after
+   * stamina gating, so callers should use it to pick movement speed.
+   */
+  update(deltaTime: number, wantSprint: boolean): boolean {
+    const sprinting = wantSprint && this.canSprint();
 
-    this.lastAttackTime = Date.now();
-    this.isAttacking = true;
-    this.attackStartTime = Date.now();
-
-    const timeSinceLastCombo = (Date.now() - this.lastComboTime) / 1000;
-    if (timeSinceLastCombo > COMBAT.COMBO_WINDOW) {
-      this.comboCount = 1;
+    if (sprinting) {
+      this.current = Math.max(0, this.current - this.drainRate * deltaTime);
+      this.timeSinceDrain = 0;
+      if (this.current <= 0) {
+        this.exhausted = true;
+      }
     } else {
-      this.comboCount = Math.min(
-        this.comboCount + 1,
-        COMBAT.MAX_COMBO
-      );
-    }
-    this.lastComboTime = Date.now();
-  }
-
-  getIsAttacking(): boolean {
-    const attackElapsed =
-      (Date.now() - this.attackStartTime) / 1000;
-    if (attackElapsed > this.attackDuration) {
-      this.isAttacking = false;
-    }
-    return this.isAttacking;
-  }
-
-  getAttackRange(): number {
-    return this.attackRange;
-  }
-
-  getAttackDamage(): number {
-    return this.attackDamage;
-  }
-
-  getAttackKnockback(): number {
-    return this.attackKnockback;
-  }
-
-  getComboCount(): number {
-    return this.comboCount;
-  }
-
-  getComboMultiplier(): number {
-    return 1 + (this.comboCount - 1) * 0.2;
-  }
-
-  update(): void {
-    if (this.isAttacking) {
-      const elapsed = (Date.now() - this.attackStartTime) / 1000;
-      if (elapsed > this.attackDuration) {
-        this.isAttacking = false;
+      this.timeSinceDrain += deltaTime;
+      if (this.timeSinceDrain >= this.regenDelay) {
+        this.current = Math.min(this.max, this.current + this.regenRate * deltaTime);
+      }
+      if (this.exhausted && this.current >= this.max * this.recoverThreshold) {
+        this.exhausted = false;
       }
     }
+
+    return sprinting;
+  }
+
+  getRatio(): number {
+    return this.current / this.max;
+  }
+
+  getIsExhausted(): boolean {
+    return this.exhausted;
+  }
+
+  reset(): void {
+    this.current = this.max;
+    this.exhausted = false;
+    this.timeSinceDrain = 0;
   }
 }

@@ -3,10 +3,8 @@ import { UI } from '../utils/Constants';
 
 export class UISystem {
   private container: HTMLDivElement;
-  private playerHealthBar: HTMLElement;
-  private playerHealthText: HTMLElement;
-  private enemyHealthBar: HTMLElement;
-  private enemyHealthText: HTMLElement;
+  private staminaBar: HTMLElement;
+  private staminaText: HTMLElement;
   private timerText: HTMLElement;
   private objectiveText: HTMLElement;
   private fpsCounter: HTMLElement;
@@ -27,27 +25,16 @@ export class UISystem {
     this.container.style.zIndex = '100';
     document.body.appendChild(this.container);
 
-    this.playerHealthBar = this.createHealthBar('player-health', true);
+    this.staminaBar = this.createHealthBar('player-stamina', true);
 
-    this.playerHealthText = document.createElement('div');
-    this.playerHealthText.style.position = 'absolute';
-    this.playerHealthText.style.top = `${UI.PADDING + 50}px`;
-    this.playerHealthText.style.left = `${UI.PADDING}px`;
-    this.playerHealthText.style.color = '#ffffff';
-    this.playerHealthText.style.fontSize = `${UI.FONT_SIZE}px`;
-    this.playerHealthText.textContent = 'Player HP: 100/100';
-    this.container.appendChild(this.playerHealthText);
-
-    this.enemyHealthBar = this.createHealthBar('enemy-health', false);
-
-    this.enemyHealthText = document.createElement('div');
-    this.enemyHealthText.style.position = 'absolute';
-    this.enemyHealthText.style.top = `${UI.PADDING + 50}px`;
-    this.enemyHealthText.style.right = `${UI.PADDING}px`;
-    this.enemyHealthText.style.color = '#ffffff';
-    this.enemyHealthText.style.fontSize = `${UI.FONT_SIZE}px`;
-    this.enemyHealthText.textContent = 'Enemy HP: 60/60';
-    this.container.appendChild(this.enemyHealthText);
+    this.staminaText = document.createElement('div');
+    this.staminaText.style.position = 'absolute';
+    this.staminaText.style.top = `${UI.PADDING + 50}px`;
+    this.staminaText.style.left = `${UI.PADDING}px`;
+    this.staminaText.style.color = '#ffffff';
+    this.staminaText.style.fontSize = `${UI.FONT_SIZE}px`;
+    this.staminaText.textContent = 'Stamina';
+    this.container.appendChild(this.staminaText);
 
     this.timerText = document.createElement('div');
     this.timerText.style.position = 'absolute';
@@ -162,22 +149,19 @@ export class UISystem {
     return screen;
   }
 
-  updatePlayerHealth(current: number, max: number): void {
-    const ratio = Math.max(0, current / max);
-    const fill = this.playerHealthBar.querySelector('.health-fill') as HTMLElement;
+  updateStamina(ratio: number, exhausted: boolean): void {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const fill = this.staminaBar.querySelector('.health-fill') as HTMLElement;
     if (fill) {
-      fill.style.width = `${ratio * 100}%`;
+      fill.style.width = `${clamped * 100}%`;
+      // Exhausted: red. Low but recovering: amber. Otherwise green.
+      fill.style.backgroundColor = exhausted
+        ? '#ff3b30'
+        : clamped < 0.35
+          ? '#ffb300'
+          : '#00d26a';
     }
-    this.playerHealthText.textContent = `Player HP: ${Math.ceil(current)}/${max}`;
-  }
-
-  updateEnemyHealth(current: number, max: number): void {
-    const ratio = Math.max(0, current / max);
-    const fill = this.enemyHealthBar.querySelector('.health-fill') as HTMLElement;
-    if (fill) {
-      fill.style.width = `${ratio * 100}%`;
-    }
-    this.enemyHealthText.textContent = `Enemy HP: ${Math.ceil(current)}/${max}`;
+    this.staminaText.textContent = exhausted ? 'Exhausted!' : 'Stamina';
   }
 
   updateFPS(deltaTime: number): void {

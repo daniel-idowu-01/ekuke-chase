@@ -152,14 +152,11 @@ export class CharacterAnimationStateMachine {
     isMoving: boolean,
     isSprinting: boolean,
     isJumping: boolean,
-    isAttacking: boolean,
     speed: number
   ): void {
     let nextState = this.currentState;
 
-    if (isAttacking) {
-      nextState = 'attack';
-    } else if (isJumping) {
+    if (isJumping) {
       nextState = 'jump';
     } else if (isMoving) {
       if (isSprinting || speed > 7.5) {

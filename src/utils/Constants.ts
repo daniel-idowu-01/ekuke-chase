@@ -9,35 +9,36 @@ export const PLAYER = {
   JUMP_FORCE: 12,
   GROUND_DRAG: 0.1,
   AIR_DRAG: 0.02,
-  MAX_HEALTH: 100,
   MASS: 1,
 };
 
-export const COMBAT = {
-  ATTACK_RANGE: 2,
-  ATTACK_COOLDOWN: 0.5,
-  ATTACK_DURATION: 0.4,
-  ATTACK_DAMAGE: 20,
-  ATTACK_KNOCKBACK: 8,
-  HITSTUN_DURATION: 0.3,
-  COMBO_WINDOW: 0.8,
-  MAX_COMBO: 3,
+// Sprint stamina. Drain/regen are in stamina-units per second; MAX is the
+// pool size, so MAX / DRAIN ~ seconds of continuous sprint.
+export const STAMINA = {
+  MAX: 100,
+  DRAIN_RATE: 28,
+  REGEN_RATE: 18,
+  REGEN_DELAY: 0.6,
+  RECOVER_THRESHOLD: 0.25,
 };
 
 export const ENEMY = {
-  MAX_HEALTH: 60,
   SPEED: 7.5,
+  PATROL_SPEED: 2.6,
   ACCELERATION: 13,
   DECELERATION: 9,
   ROTATION_SPEED: 7,
-  ATTACK_WINDUP: 0.35,
-  CHASE_RADIUS: 100,
-  ATTACK_RANGE: 1.2,
-  ATTACK_COOLDOWN: 0.8,
-  ATTACK_DAMAGE: 20,
-  ATTACK_KNOCKBACK: 6,
   MASS: 1,
-  DETECTION_RADIUS: 100,
+  // Behaviour radii (world units). The arena spans roughly -15..15.
+  DETECTION_RADIUS: 13,
+  LOSE_INTEREST_RADIUS: 19,
+  CATCH_RADIUS: 1.1,
+  // State timings (seconds).
+  IDLE_DURATION: 1.8,
+  ALERT_DURATION: 0.65,
+  LOSE_INTEREST_TIME: 3,
+  PATROL_REACH_DISTANCE: 1.2,
+  PATROL_REPICK_TIME: 6,
 };
 
 export const GAME = {

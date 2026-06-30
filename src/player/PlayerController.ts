@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { AnimationManager, CharacterAnimationStateMachine } from '../animation/AnimationManager';
-import type { DamageInfo } from '../combat/CombatSystem';
-import { AttackComponent, HealthComponent } from '../combat/CombatSystem';
-import { PLAYER, COMBAT, SCENE } from '../utils/Constants';
+import { StaminaComponent } from '../combat/CombatSystem';
+import { PLAYER, STAMINA, SCENE } from '../utils/Constants';
 import { VectorUtils } from '../utils/VectorUtils';
 
 
@@ -14,8 +13,7 @@ export class PlayerController {
   private bodyHandle: RAPIER.RigidBodyHandle;
   private animationManager: AnimationManager;
   private animationStateMachine: CharacterAnimationStateMachine;
-  private healthComponent: HealthComponent;
-  private attackComponent: AttackComponent;
+  private stamina: StaminaComponent;
 
   private inputState = {
     moveForward: false,
@@ -24,21 +22,16 @@ export class PlayerController {
     moveRight: false,
     sprint: false,
     jump: false,
-    attack: false,
   };
 
   private isGrounded: boolean = false;
-  private isAttacking: boolean = false;
-  private isHit: boolean = false;
   private wasGrounded: boolean = false;
-  private hitStunTimer: number = 0;
+  private isSprinting: boolean = false;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
   private facing: number = 0;
   private worldCamera: THREE.Camera | null = null;
   private footstepTimer: number = 0;
-
-  private lastHitTargets: Set<any> = new Set();
 
   constructor(
     model: THREE.Object3D,
@@ -56,15 +49,12 @@ export class PlayerController {
     this.bodyHandle = physicsWorld.createDynamicBody(position, PLAYER.MASS, 'capsule');
     physicsWorld.linkBody(model, this.bodyHandle);
 
-    this.healthComponent = new HealthComponent(PLAYER.MAX_HEALTH);
-    this.healthComponent.onDeath(() => this.onDeath());
-
-    this.attackComponent = new AttackComponent(
-      COMBAT.ATTACK_RANGE,
-      COMBAT.ATTACK_DAMAGE,
-      COMBAT.ATTACK_KNOCKBACK,
-      COMBAT.ATTACK_COOLDOWN,
-      COMBAT.ATTACK_DURATION
+    this.stamina = new StaminaComponent(
+      STAMINA.MAX,
+      STAMINA.DRAIN_RATE,
+      STAMINA.REGEN_RATE,
+      STAMINA.REGEN_DELAY,
+      STAMINA.RECOVER_THRESHOLD
     );
 
     this.setupInputListeners();
@@ -124,15 +114,10 @@ export class PlayerController {
           break;
       }
     });
-
-    document.addEventListener('click', () => {
-      this.inputState.attack = true;
-    });
   }
 
-  update(deltaTime: number, allCharacters?: any[]): void {
+  update(deltaTime: number): void {
     this.animationManager.update(deltaTime);
-    this.attackComponent.update();
 
     this.wasGrounded = this.isGrounded;
     this.isGrounded = this.physicsWorld.isGrounded(this.bodyHandle);
@@ -140,14 +125,12 @@ export class PlayerController {
       this.onLand();
     }
 
-    if (this.isHit) {
-      this.hitStunTimer -= deltaTime;
-      if (this.hitStunTimer <= 0) {
-        this.isHit = false;
-      }
-    }
-
     const inputDirection = this.getInputDirection();
+
+    // Sprint is only granted if the player is moving, grounded, and has
+    // stamina. The stamina component returns whether sprint is truly active.
+    const wantSprint = this.inputState.sprint && this.isGrounded && inputDirection.lengthSq() > 0;
+    this.isSprinting = this.stamina.update(deltaTime, wantSprint);
 
     this.updateMovement(inputDirection, deltaTime);
 
@@ -156,19 +139,11 @@ export class PlayerController {
       this.inputState.jump = false;
     }
 
-    if (this.inputState.attack && !this.isHit && !this.isAttacking) {
-      this.performAttack(allCharacters || []);
-      this.inputState.attack = false;
-    }
-
-    this.isAttacking = this.attackComponent.getIsAttacking();
-
     const speed = this.velocity.length();
     this.animationStateMachine.update(
       inputDirection.length() > 0.1,
-      this.inputState.sprint && this.isGrounded,
+      this.isSprinting,
       !this.isGrounded,
-      this.isAttacking,
       speed
     );
 
@@ -219,7 +194,7 @@ export class PlayerController {
   }
 
   private updateMovement(direction: THREE.Vector3, deltaTime: number): void {
-    const targetSpeed = this.inputState.sprint
+    const targetSpeed = this.isSprinting
       ? PLAYER.SPRINT_SPEED
       : PLAYER.SPEED;
 
@@ -256,51 +231,6 @@ export class PlayerController {
     this.physicsWorld.applyImpulse(this.bodyHandle, jumpForce);
   }
 
-  private performAttack(allCharacters: any[]): void {
-    if (!this.attackComponent.canAttack()) return;
-
-    this.attackComponent.performAttack();
-    this.isAttacking = true;
-
-    this.animationStateMachine.playAction('attack');
-
-    const playerPos = this.model.position;
-    const attackRange = this.attackComponent.getAttackRange();
-
-    allCharacters.forEach((character) => {
-      if (character === this) return;
-
-      const targetPos = character.getWorldPosition();
-      const distance = playerPos.distanceTo(targetPos);
-
-      if (distance < attackRange && !this.lastHitTargets.has(character)) {
-        const knockbackDir = targetPos
-          .clone()
-          .sub(playerPos)
-          .normalize();
-        const damageInfo: DamageInfo = {
-          damage: this.attackComponent.getAttackDamage() * this.attackComponent.getComboMultiplier(),
-          knockback: this.attackComponent.getAttackKnockback(),
-          knockbackDirection: knockbackDir,
-          stun: COMBAT.HITSTUN_DURATION,
-        };
-
-        character.takeDamage(damageInfo);
-        this.lastHitTargets.add(character);
-
-        this.onHitTarget(character);
-      }
-    });
-
-    setTimeout(() => {
-      this.lastHitTargets.clear();
-    }, this.attackComponent.getAttackRange() * 100);
-  }
-
-  private onHitTarget(target: any): void {
-    console.log('Hit target!', target);
-  }
-
   private updateFootsteps(deltaTime: number): void {
     const speed = this.velocity.length();
     if (!this.isGrounded || speed < 1.2) {
@@ -311,7 +241,7 @@ export class PlayerController {
     this.footstepTimer -= deltaTime * speed;
     if (this.footstepTimer <= 0) {
       this.onFootstep();
-      this.footstepTimer = this.inputState.sprint ? 2.4 : 3.2;
+      this.footstepTimer = this.isSprinting ? 2.4 : 3.2;
     }
   }
 
@@ -321,34 +251,8 @@ export class PlayerController {
   private onLand(): void {
   }
 
-  takeDamage(damageInfo: DamageInfo): void {
-    this.healthComponent.takeDamage(damageInfo.damage);
-    this.applyKnockback(damageInfo.knockbackDirection, damageInfo.knockback);
-
-    this.isHit = true;
-    this.hitStunTimer = damageInfo.stun;
-
-    this.animationStateMachine.playAction('hit');
-  }
-
-  private applyKnockback(direction: THREE.Vector3, magnitude: number): void {
-    const knockbackForce = direction.clone().multiplyScalar(magnitude);
-    // Keep knockback horizontal so hits do not launch characters upward.
-    knockbackForce.y = 0;
-    this.physicsWorld.applyImpulse(this.bodyHandle, knockbackForce);
-  }
-
-  private onDeath(): void {
-    console.log('Player defeated!');
-    this.animationStateMachine.playAction('death');
-  }
-
   getWorldPosition(): THREE.Vector3 {
     return this.model.position.clone();
-  }
-
-  getHealth(): HealthComponent {
-    return this.healthComponent;
   }
 
   getModel(): THREE.Object3D {
@@ -364,7 +268,15 @@ export class PlayerController {
   }
 
   getSprintRatio(): number {
-    return this.inputState.sprint ? THREE.MathUtils.clamp(this.getSpeed() / PLAYER.SPRINT_SPEED, 0, 1) : 0;
+    return this.isSprinting ? THREE.MathUtils.clamp(this.getSpeed() / PLAYER.SPRINT_SPEED, 0, 1) : 0;
+  }
+
+  getStaminaRatio(): number {
+    return this.stamina.getRatio();
+  }
+
+  isExhausted(): boolean {
+    return this.stamina.getIsExhausted();
   }
 
   cleanup(): void {

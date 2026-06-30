@@ -180,7 +180,7 @@ export class GameManager {
   private createPlaceholderAnimations(): THREE.AnimationClip[] {
     const animations: THREE.AnimationClip[] = [];
 
-    const animationNames = ['idle', 'walk', 'run', 'sprint', 'jump', 'attack', 'hit', 'death'];
+    const animationNames = ['idle', 'walk', 'run', 'sprint', 'jump'];
 
     animationNames.forEach((name) => {
       animations.push(this.createProceduralClip(name));
@@ -281,31 +281,20 @@ export class GameManager {
 
     this.survivalTimeRemaining -= deltaTime;
 
-    this.player.update(deltaTime, [this.enemy]);
+    this.player.update(deltaTime);
 
     this.enemy.update(deltaTime);
 
     this.cameraController.update(this.player.getModel().position, this.player.getSprintRatio());
 
-    const playerHealth = this.player.getHealth();
-    const enemyHealth = this.enemy.getHealth();
-
-    this.uiSystem.updatePlayerHealth(
-      playerHealth.getCurrentHealth(),
-      playerHealth.getMaxHealth()
-    );
-
-    this.uiSystem.updateEnemyHealth(
-      enemyHealth.getCurrentHealth(),
-      enemyHealth.getMaxHealth()
-    );
+    this.uiSystem.updateStamina(this.player.getStaminaRatio(), this.player.isExhausted());
 
     this.uiSystem.updateFPS(deltaTime);
     this.uiSystem.updateSurvivalTimer(this.survivalTimeRemaining);
 
     if (this.survivalTimeRemaining <= 0) {
       this.endGame(true);
-    } else if (playerHealth.getIsDead()) {
+    } else if (this.enemy.hasCaughtPlayer()) {
       this.endGame(false);
     }
   }
