@@ -19,16 +19,21 @@ export const PLAYER = {
 
 // Sprint stamina. Drain/regen are in stamina-units per second; MAX is the
 // pool size, so MAX / DRAIN ~ seconds of continuous sprint.
+// Tuned for escapability: ~6.7s of sprint, quick recovery so the player can
+// repeatedly open a gap instead of being permanently winded.
 export const STAMINA = {
   MAX: 100,
-  DRAIN_RATE: 28,
-  REGEN_RATE: 18,
-  REGEN_DELAY: 0.6,
-  RECOVER_THRESHOLD: 0.25,
+  DRAIN_RATE: 15,
+  REGEN_RATE: 26,
+  REGEN_DELAY: 0.4,
+  RECOVER_THRESHOLD: 0.15,
 };
 
 export const ENEMY = {
-  SPEED: 7.5,
+  // Chase speed sits just under the player's base run (PLAYER.SPEED 7), so
+  // jogging holds even-to-slightly-ahead and a sprint (11) clearly escapes.
+  // The dog is still a threat on turns/obstacles where the player loses speed.
+  SPEED: 6.8,
   PATROL_SPEED: 2.6,
   ACCELERATION: 13,
   DECELERATION: 9,
@@ -39,12 +44,14 @@ export const ENEMY = {
   MODEL_HEIGHT: 0.85,
   // Behaviour radii (world units). The arena spans roughly -15..15.
   DETECTION_RADIUS: 13,
-  LOSE_INTEREST_RADIUS: 19,
-  CATCH_RADIUS: 1.1,
+  // Reachable lose-interest: break ~14 units away for 2.5s and the dog gives
+  // up and returns to patrol, granting a real breather.
+  LOSE_INTEREST_RADIUS: 14,
+  CATCH_RADIUS: 0.9,
   // State timings (seconds).
   IDLE_DURATION: 1.8,
   ALERT_DURATION: 0.65,
-  LOSE_INTEREST_TIME: 3,
+  LOSE_INTEREST_TIME: 2.5,
   PATROL_REACH_DISTANCE: 1.2,
   PATROL_REPICK_TIME: 6,
 };
