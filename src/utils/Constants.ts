@@ -42,11 +42,11 @@ export const ENEMY = {
   // Target visual height (world units) the wolf GLB is scaled to. Its box
   // collider is derived from the scaled bounding box at load time.
   MODEL_HEIGHT: 0.85,
-  // Behaviour radii (world units). The arena spans roughly -15..15.
-  DETECTION_RADIUS: 13,
-  // Reachable lose-interest: break ~14 units away for 2.5s and the dog gives
-  // up and returns to patrol, granting a real breather.
-  LOSE_INTEREST_RADIUS: 14,
+  // Behaviour radii (world units). The arena spans roughly -25..25.
+  DETECTION_RADIUS: 15,
+  // Reachable lose-interest: break ~18 units away for 2.5s and the dog gives
+  // up and returns to patrol, granting a real breather in the larger map.
+  LOSE_INTEREST_RADIUS: 18,
   CATCH_RADIUS: 0.9,
   // State timings (seconds).
   IDLE_DURATION: 1.8,
@@ -92,7 +92,7 @@ export const ANIMATION = {
 };
 
 export const SCENE = {
-  ARENA_SIZE: 30,
+  ARENA_SIZE: 50,
   GROUND_HEIGHT: -0.5,
   LIGHT_INTENSITY: 2.6,
   AMBIENT_INTENSITY: 0.7,

@@ -101,7 +101,7 @@ export class GameManager {
     // Parent group is what physics drives + the controller rotates.
     const root = new THREE.Group();
     root.add(character);
-    root.position.set(0, capsuleHalf, -8);
+    root.position.set(0, capsuleHalf, -18);
     this.renderer.add(root);
 
     const clips = remapAnimationClips(gltf.animations, PLAYER_ANIM_MAP);
@@ -151,7 +151,7 @@ export class GameManager {
 
     const root = new THREE.Group();
     root.add(character);
-    root.position.set(0, halfHeight, 8);
+    root.position.set(0, halfHeight, 18);
     this.renderer.add(root);
 
     const clips = remapAnimationClips(gltf.animations, ENEMY_ANIM_MAP);
