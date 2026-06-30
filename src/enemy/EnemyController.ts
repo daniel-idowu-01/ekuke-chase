@@ -38,14 +38,15 @@ export class EnemyController {
     model: THREE.Object3D,
     position: THREE.Vector3,
     physicsWorld: PhysicsWorld,
-    animationManager: AnimationManager
+    animationManager: AnimationManager,
+    colliderDims?: { hx: number; hy: number; hz: number }
   ) {
     this.model = model;
     this.physicsWorld = physicsWorld;
     this.animationManager = animationManager;
     this.animationStateMachine = new CharacterAnimationStateMachine(animationManager);
 
-    this.bodyHandle = physicsWorld.createDynamicBody(position, ENEMY.MASS, 'dog');
+    this.bodyHandle = physicsWorld.createDynamicBody(position, ENEMY.MASS, 'dog', colliderDims);
     physicsWorld.linkBody(model, this.bodyHandle);
   }
 
@@ -59,14 +60,17 @@ export class EnemyController {
 
     this.updateAIState(deltaTime);
 
-    const speed = this.velocity.length();
-    const isChasing = this.currentState === EnemyState.CHASE;
-    this.animationStateMachine.update(
-      speed > 0.3,
-      isChasing,
-      !this.isGrounded,
-      speed
-    );
+    // While caught, let the one-shot lunge/bite play instead of locomotion.
+    if (this.currentState !== EnemyState.CAUGHT) {
+      const speed = this.velocity.length();
+      const isChasing = this.currentState === EnemyState.CHASE;
+      this.animationStateMachine.update(
+        speed > 0.3,
+        isChasing,
+        !this.isGrounded,
+        speed
+      );
+    }
   }
 
   private setState(next: EnemyStateType): void {
@@ -164,6 +168,7 @@ export class EnemyController {
 
     if (distanceToTarget <= ENEMY.CATCH_RADIUS) {
       this.setState(EnemyState.CAUGHT);
+      this.animationStateMachine.playAction('attack'); // lunge/bite on the catch
       this.stop(deltaTime);
       return;
     }

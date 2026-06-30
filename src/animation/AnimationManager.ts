@@ -13,7 +13,9 @@ export interface AnimationState {
 export class AnimationManager {
   private mixer: THREE.AnimationMixer;
   private animations: Map<string, THREE.AnimationAction> = new Map();
-  private currentState: string = 'idle';
+  // Empty so the very first play()/transition actually starts a clip instead
+  // of being short-circuited by a state that was never really playing.
+  private currentState: string = '';
   private transitionDuration: number = ANIMATION.FADE_DURATION;
   private activeAction: THREE.AnimationAction | null = null;
 
@@ -142,7 +144,8 @@ export class AnimationManager {
 
 export class CharacterAnimationStateMachine {
   private animationManager: AnimationManager;
-  private currentState: string = 'idle';
+  // Empty so the first update() transitions into (and plays) the real state.
+  private currentState: string = '';
 
   constructor(animationManager: AnimationManager) {
     this.animationManager = animationManager;

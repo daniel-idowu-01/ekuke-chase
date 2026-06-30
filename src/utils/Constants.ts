@@ -10,6 +10,11 @@ export const PLAYER = {
   GROUND_DRAG: 0.1,
   AIR_DRAG: 0.02,
   MASS: 1,
+  // Capsule collider sized to the GLB model. Half-height kept at the old
+  // value so vertical movement/jump feel is unchanged; radius widened a
+  // little to match the humanoid footprint. Total height = 2*(hh + r).
+  CAPSULE_HALF_HEIGHT: 0.45,
+  CAPSULE_RADIUS: 0.28,
 };
 
 // Sprint stamina. Drain/regen are in stamina-units per second; MAX is the
@@ -29,6 +34,9 @@ export const ENEMY = {
   DECELERATION: 9,
   ROTATION_SPEED: 7,
   MASS: 1,
+  // Target visual height (world units) the wolf GLB is scaled to. Its box
+  // collider is derived from the scaled bounding box at load time.
+  MODEL_HEIGHT: 0.85,
   // Behaviour radii (world units). The arena spans roughly -15..15.
   DETECTION_RADIUS: 13,
   LOSE_INTEREST_RADIUS: 19,

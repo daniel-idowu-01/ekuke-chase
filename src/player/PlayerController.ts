@@ -46,7 +46,10 @@ export class PlayerController {
     this.animationStateMachine = new CharacterAnimationStateMachine(animationManager);
     this.worldCamera = camera;
 
-    this.bodyHandle = physicsWorld.createDynamicBody(position, PLAYER.MASS, 'capsule');
+    this.bodyHandle = physicsWorld.createDynamicBody(position, PLAYER.MASS, 'capsule', {
+      halfHeight: PLAYER.CAPSULE_HALF_HEIGHT,
+      radius: PLAYER.CAPSULE_RADIUS,
+    });
     physicsWorld.linkBody(model, this.bodyHandle);
 
     this.stamina = new StaminaComponent(

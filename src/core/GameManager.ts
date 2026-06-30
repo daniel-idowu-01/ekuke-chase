@@ -7,7 +7,31 @@ import { CameraController } from '../systems/CameraController';
 import { UISystem } from '../systems/UISystem';
 import { AnimationManager } from '../animation/AnimationManager';
 import { CityScene } from '../scenes/CityScene';
-import { GAME, PHYSICS } from '../utils/Constants';
+import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
+import { GAME, PHYSICS, PLAYER, ENEMY } from '../utils/Constants';
+
+// Maps the player GLB's own clip names onto the game's state vocabulary.
+// RobotExpressive.glb (CC0, Tomás Laulhé / Don McCurdy) ships Idle/Walking/
+// Running/Jump; run + sprint share "Running" (sprint is just played faster).
+const PLAYER_ANIM_MAP: Record<string, string> = {
+  idle: 'Idle',
+  walk: 'Walking',
+  run: 'Running',
+  sprint: 'Running',
+  jump: 'Jump',
+};
+
+// Maps the wolf GLB's clip names onto the game's state vocabulary.
+// Wolf.glb (CC0, Quaternius via Poly Pizza) ships Idle/Walk/Gallop/Attack/...
+// Gallop is the fast gait (run + chase); Attack is the one-shot catch lunge.
+const ENEMY_ANIM_MAP: Record<string, string> = {
+  idle: 'Idle',
+  walk: 'Walk',
+  run: 'Gallop',
+  sprint: 'Gallop',
+  jump: 'Jump_ToIdle',
+  attack: 'Attack',
+};
 
 
 export class GameManager {
@@ -18,6 +42,8 @@ export class GameManager {
   private cameraController: CameraController;
   private uiSystem: UISystem;
   private cityScene: CityScene;
+  private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
+  private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
   private gameOver: boolean = false;
   private survivalTimeRemaining: number = GAME.SURVIVAL_TIME;
 
@@ -38,9 +64,11 @@ export class GameManager {
 
     this.cityScene.setup();
 
-    this.createPlayer();
+    await Promise.all([this.playerModel.preload(), this.enemyModel.preload()]);
 
-    this.createEnemy();
+    await this.createPlayer();
+
+    await this.createEnemy();
 
     this.cameraController.setTarget(this.player!.getModel());
 
@@ -48,203 +76,88 @@ export class GameManager {
     this.start();
   }
 
-  private createPlayer(): void {
-    const playerMesh = this.createHumanModel();
-    playerMesh.position.set(0, 0.7, -8);
+  private async createPlayer(): Promise<void> {
+    const gltf = await this.playerModel.instantiate();
+    const character = gltf.scene;
+    character.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
-    this.renderer.add(playerMesh);
+    // Fit the model to the physics capsule: total capsule height, feet resting
+    // at the capsule's bottom relative to the (centre-aligned) body origin.
+    const capsuleHalf = PLAYER.CAPSULE_HALF_HEIGHT + PLAYER.CAPSULE_RADIUS;
+    fitToHeight(character, capsuleHalf * 2, -capsuleHalf);
 
-    const animations = this.createPlaceholderAnimations();
-    const animationManager = new AnimationManager(playerMesh, animations);
+    // RobotExpressive faces +Z by default, which matches our facing convention
+    // (forward = +Z). Flip to Math.PI here if a model ends up facing backward.
+    character.rotation.y = 0;
+
+    // Parent group is what physics drives + the controller rotates.
+    const root = new THREE.Group();
+    root.add(character);
+    root.position.set(0, capsuleHalf, -8);
+    this.renderer.add(root);
+
+    const clips = remapAnimationClips(gltf.animations, PLAYER_ANIM_MAP);
+    const animationManager = new AnimationManager(character, clips);
 
     this.player = new PlayerController(
-      playerMesh,
-      playerMesh.position.clone(),
+      root,
+      root.position.clone(),
       this.physicsWorld,
       animationManager,
       this.renderer.getCamera()
     );
   }
 
-  private createEnemy(): void {
-    const enemyMesh = this.createDogModel();
-    enemyMesh.position.set(0, 0.45, 8);
+  private async createEnemy(): Promise<void> {
+    const gltf = await this.enemyModel.instantiate();
+    const character = gltf.scene;
+    character.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
-    this.renderer.add(enemyMesh);
+    // The box collider's vertical half-extent equals half the target height.
+    const halfHeight = ENEMY.MODEL_HEIGHT / 2;
+    fitToHeight(character, ENEMY.MODEL_HEIGHT, -halfHeight);
 
-    const animations = this.createPlaceholderAnimations();
-    const animationManager = new AnimationManager(enemyMesh, animations);
+    // Derive horizontal collider half-extents from the scaled bounds, trimmed
+    // a little so the long snout/tail don't snag the wolf on obstacles.
+    character.updateMatrixWorld(true);
+    const size = new THREE.Box3().setFromObject(character).getSize(new THREE.Vector3());
+    const dims = {
+      hx: (size.x / 2) * 0.85,
+      hy: halfHeight,
+      hz: (size.z / 2) * 0.85,
+    };
+
+    // Quaternius animals face +Z, matching our forward convention. Flip to
+    // Math.PI here if the wolf ends up running backward.
+    character.rotation.y = 0;
+
+    const root = new THREE.Group();
+    root.add(character);
+    root.position.set(0, halfHeight, 8);
+    this.renderer.add(root);
+
+    const clips = remapAnimationClips(gltf.animations, ENEMY_ANIM_MAP);
+    const animationManager = new AnimationManager(character, clips);
 
     this.enemy = new EnemyController(
-      enemyMesh,
-      enemyMesh.position.clone(),
+      root,
+      root.position.clone(),
       this.physicsWorld,
-      animationManager
+      animationManager,
+      dims
     );
 
     this.enemy.setTarget(this.player);
-  }
-
-  private createHumanModel(): THREE.Group {
-    const human = new THREE.Group();
-    const skin = new THREE.MeshStandardMaterial({ color: 0xffc28b, roughness: 0.6 });
-    const shirt = new THREE.MeshStandardMaterial({ color: 0x1e88ff, roughness: 0.7 });
-    const pants = new THREE.MeshStandardMaterial({ color: 0x202842, roughness: 0.8 });
-    const shoe = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.75, 6, 12), shirt);
-    torso.name = 'torso';
-    torso.position.y = 0.65;
-    human.add(torso);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), skin);
-    head.name = 'head';
-    head.position.y = 1.35;
-    human.add(head);
-
-    this.addLimb(human, 'leftArm', new THREE.Vector3(-0.26, 0.67, 0), new THREE.Vector3(0.1, 0.52, 0.1), skin);
-    this.addLimb(human, 'rightArm', new THREE.Vector3(0.26, 0.67, 0), new THREE.Vector3(0.1, 0.52, 0.1), skin);
-    this.addLimb(human, 'leftLeg', new THREE.Vector3(-0.11, 0.05, 0), new THREE.Vector3(0.11, 0.62, 0.11), pants);
-    this.addLimb(human, 'rightLeg', new THREE.Vector3(0.11, 0.05, 0), new THREE.Vector3(0.11, 0.62, 0.11), pants);
-    this.addLimb(human, 'leftFoot', new THREE.Vector3(-0.11, -0.3, -0.04), new THREE.Vector3(0.16, 0.07, 0.24), shoe);
-    this.addLimb(human, 'rightFoot', new THREE.Vector3(0.11, -0.3, -0.04), new THREE.Vector3(0.16, 0.07, 0.24), shoe);
-
-    human.scale.setScalar(0.72);
-
-    human.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-
-    return human;
-  }
-
-  private createDogModel(): THREE.Group {
-    const dog = new THREE.Group();
-    const fur = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.75 });
-    const darkFur = new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: 0.8 });
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.38, 0.42), fur);
-    body.name = 'dogBody';
-    body.position.y = 0.25;
-    dog.add(body);
-
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.32), fur);
-    head.name = 'dogHead';
-    head.position.set(0, 0.42, -0.48);
-    dog.add(head);
-
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.22), darkFur);
-    snout.name = 'dogSnout';
-    snout.position.set(0, 0.38, -0.74);
-    dog.add(snout);
-
-    this.addLimb(dog, 'frontLeftLeg', new THREE.Vector3(-0.32, -0.08, -0.2), new THREE.Vector3(0.1, 0.36, 0.1), fur);
-    this.addLimb(dog, 'frontRightLeg', new THREE.Vector3(0.32, -0.08, -0.2), new THREE.Vector3(0.1, 0.36, 0.1), fur);
-    this.addLimb(dog, 'backLeftLeg', new THREE.Vector3(-0.32, -0.08, 0.22), new THREE.Vector3(0.1, 0.36, 0.1), fur);
-    this.addLimb(dog, 'backRightLeg', new THREE.Vector3(0.32, -0.08, 0.22), new THREE.Vector3(0.1, 0.36, 0.1), fur);
-
-    const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.38, 4, 8), fur);
-    tail.name = 'dogTail';
-    tail.position.set(0, 0.42, 0.52);
-    tail.rotation.x = Math.PI / 3;
-    dog.add(tail);
-
-    dog.scale.setScalar(0.62);
-
-    dog.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-
-    return dog;
-  }
-
-  private addLimb(
-    parent: THREE.Object3D,
-    name: string,
-    position: THREE.Vector3,
-    scale: THREE.Vector3,
-    material: THREE.Material
-  ): void {
-    const limb = new THREE.Mesh(new THREE.BoxGeometry(scale.x, scale.y, scale.z), material);
-    limb.name = name;
-    limb.position.copy(position);
-    parent.add(limb);
-  }
-
-  private createPlaceholderAnimations(): THREE.AnimationClip[] {
-    const animations: THREE.AnimationClip[] = [];
-
-    const animationNames = ['idle', 'walk', 'run', 'sprint', 'jump'];
-
-    animationNames.forEach((name) => {
-      animations.push(this.createProceduralClip(name));
-    });
-
-    return animations;
-  }
-
-  private createProceduralClip(name: string): THREE.AnimationClip {
-    const times = [0, 0.25, 0.5, 0.75, 1];
-    const rest = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    const walkA = [0.42, 0, -0.42, 0, 0.42];
-    const walkB = [-0.42, 0, 0.42, 0, -0.42];
-    const runA = [0.72, 0, -0.72, 0, 0.72];
-    const runB = [-0.72, 0, 0.72, 0, -0.72];
-    const dogA = [0.5, -0.2, -0.5, 0.2, 0.5];
-    const dogB = [-0.5, 0.2, 0.5, -0.2, -0.5];
-    const tracks: THREE.KeyframeTrack[] = [];
-
-    const addRotation = (target: string, values: number[]) => {
-      tracks.push(new THREE.NumberKeyframeTrack(`${target}.rotation[x]`, times, values));
-    };
-
-    const moving = name === 'walk' || name === 'run' || name === 'sprint';
-    const attack = name === 'attack';
-    const hit = name === 'hit';
-    const death = name === 'death';
-    const ampA = name === 'walk' ? walkA : runA;
-    const ampB = name === 'walk' ? walkB : runB;
-
-    if (moving) {
-      addRotation('leftLeg', ampA);
-      addRotation('rightLeg', ampB);
-      addRotation('leftArm', ampB.map((value) => value * 0.75));
-      addRotation('rightArm', ampA.map((value) => value * 0.75));
-      addRotation('frontLeftLeg', dogA);
-      addRotation('backRightLeg', dogA);
-      addRotation('frontRightLeg', dogB);
-      addRotation('backLeftLeg', dogB);
-      tracks.push(new THREE.NumberKeyframeTrack('torso.position[y]', times, [0.65, 0.68, 0.65, 0.68, 0.65]));
-      tracks.push(new THREE.NumberKeyframeTrack('dogBody.position[y]', times, [0.25, 0.29, 0.25, 0.29, 0.25]));
-      addRotation('dogTail', [0.75, 0.9, 0.75, 0.6, 0.75]);
-    } else if (attack) {
-      addRotation('leftArm', [-0.3, -0.8, -0.2, 0, -0.3]);
-      addRotation('rightArm', [-0.2, -0.9, -0.25, 0, -0.2]);
-      addRotation('dogHead', [0, -0.35, 0.18, 0, 0]);
-    } else if (hit) {
-      tracks.push(new THREE.NumberKeyframeTrack('.rotation[z]', times, [0, 0.08, -0.05, 0.02, 0]));
-    } else if (death) {
-      tracks.push(new THREE.NumberKeyframeTrack('.rotation[x]', times, [0, 0.5, 1.15, 1.35, 1.35]));
-    } else {
-      addRotation('leftLeg', rest);
-      addRotation('rightLeg', rest);
-      addRotation('leftArm', rest);
-      addRotation('rightArm', rest);
-      addRotation('frontLeftLeg', rest);
-      addRotation('frontRightLeg', rest);
-      addRotation('backLeftLeg', rest);
-      addRotation('backRightLeg', rest);
-      tracks.push(new THREE.NumberKeyframeTrack('torso.position[y]', times, [0.65, 0.67, 0.65, 0.66, 0.65]));
-      tracks.push(new THREE.NumberKeyframeTrack('dogBody.position[y]', times, [0.25, 0.27, 0.25, 0.26, 0.25]));
-    }
-
-    return new THREE.AnimationClip(name, 1, tracks);
   }
 
   private start(): void {
@@ -307,11 +220,11 @@ export class GameManager {
     this.gameOver = true;
 
     this.uiSystem.showGameOver(playerWon, () => {
-      this.restart();
+      void this.restart();
     });
   }
 
-  private restart(): void {
+  private async restart(): Promise<void> {
     console.log('Restarting game...');
 
     if (this.player) {
@@ -327,8 +240,8 @@ export class GameManager {
     this.gameOver = false;
     this.survivalTimeRemaining = GAME.SURVIVAL_TIME;
 
-    this.createPlayer();
-    this.createEnemy();
+    await this.createPlayer();
+    await this.createEnemy();
 
     this.cameraController.setTarget(this.player!.getModel());
 
