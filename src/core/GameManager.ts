@@ -140,6 +140,11 @@ export class GameManager {
       hz: (size.z / 2) * 0.85,
     };
 
+    // Catch fires on contact: the closest the dog's (axis-locked) box can get
+    // to the player capsule is its largest horizontal half-extent + the
+    // capsule radius, plus a small grace so it always registers.
+    const catchRadius = Math.max(dims.hx, dims.hz) + PLAYER.CAPSULE_RADIUS + 0.2;
+
     // Quaternius animals face +Z, matching our forward convention. Flip to
     // Math.PI here if the wolf ends up running backward.
     character.rotation.y = 0;
@@ -157,7 +162,8 @@ export class GameManager {
       root.position.clone(),
       this.physicsWorld,
       animationManager,
-      dims
+      dims,
+      catchRadius
     );
 
     this.enemy.setTarget(this.player);

@@ -29,6 +29,7 @@ export class EnemyController {
   private facing: number = 0;
 
   private isGrounded: boolean = false;
+  private catchRadius: number = ENEMY.CATCH_RADIUS;
   private stateTimer: number = 0;
   private patrolTimer: number = 0;
   private loseInterestTimer: number = 0;
@@ -39,7 +40,8 @@ export class EnemyController {
     position: THREE.Vector3,
     physicsWorld: PhysicsWorld,
     animationManager: AnimationManager,
-    colliderDims?: { hx: number; hy: number; hz: number }
+    colliderDims?: { hx: number; hy: number; hz: number },
+    catchRadius?: number
   ) {
     this.model = model;
     this.physicsWorld = physicsWorld;
@@ -48,6 +50,8 @@ export class EnemyController {
 
     this.bodyHandle = physicsWorld.createDynamicBody(position, ENEMY.MASS, 'dog', colliderDims);
     physicsWorld.linkBody(model, this.bodyHandle);
+
+    if (catchRadius !== undefined) this.catchRadius = catchRadius;
   }
 
   setTarget(target: any): void {
@@ -166,7 +170,7 @@ export class EnemyController {
       return;
     }
 
-    if (distanceToTarget <= ENEMY.CATCH_RADIUS) {
+    if (distanceToTarget <= this.catchRadius) {
       this.setState(EnemyState.CAUGHT);
       this.animationStateMachine.playAction('attack'); // lunge/bite on the catch
       this.stop(deltaTime);
