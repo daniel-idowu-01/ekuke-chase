@@ -27,6 +27,11 @@ export class PlayerController {
   private isGrounded: boolean = false;
   private wasGrounded: boolean = false;
   private isSprinting: boolean = false;
+  // External (touch) analog input. When touchActive, the joystick vector drives
+  // movement instead of the keyboard booleans. x = strafe, forward = +towards.
+  private touchActive: boolean = false;
+  private touchMoveX: number = 0;
+  private touchMoveForward: number = 0;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
   private facing: number = 0;
@@ -166,10 +171,17 @@ export class PlayerController {
   private getInputDirection(): THREE.Vector3 {
     const direction = new THREE.Vector3();
 
-    if (this.inputState.moveForward) direction.z -= 1;
-    if (this.inputState.moveBackward) direction.z += 1;
-    if (this.inputState.moveLeft) direction.x -= 1;
-    if (this.inputState.moveRight) direction.x += 1;
+    if (this.touchActive) {
+      // Joystick: forward (+) is "away from camera", matching the keyboard's
+      // moveForward = -z convention below.
+      direction.x = this.touchMoveX;
+      direction.z = -this.touchMoveForward;
+    } else {
+      if (this.inputState.moveForward) direction.z -= 1;
+      if (this.inputState.moveBackward) direction.z += 1;
+      if (this.inputState.moveLeft) direction.x -= 1;
+      if (this.inputState.moveRight) direction.x += 1;
+    }
 
     if (direction.length() > 0) {
       direction.normalize();
@@ -276,6 +288,26 @@ export class PlayerController {
 
   getStaminaRatio(): number {
     return this.stamina.getRatio();
+  }
+
+  /** Current facing angle (radians) for the auto-follow camera to trail. */
+  getHeading(): number {
+    return this.facing;
+  }
+
+  /** Feed analog movement from an external source (touch joystick). */
+  setMoveInput(x: number, forward: number): void {
+    this.touchActive = true;
+    this.touchMoveX = x;
+    this.touchMoveForward = forward;
+  }
+
+  setSprintInput(active: boolean): void {
+    this.inputState.sprint = active;
+  }
+
+  requestJump(): void {
+    this.inputState.jump = true;
   }
 
   isExhausted(): boolean {

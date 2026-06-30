@@ -5,6 +5,7 @@ import { PlayerController } from '../player/PlayerController';
 import { EnemyController } from '../enemy/EnemyController';
 import { CameraController } from '../systems/CameraController';
 import { UISystem } from '../systems/UISystem';
+import { TouchControls } from '../systems/TouchControls';
 import { AnimationManager } from '../animation/AnimationManager';
 import { CityScene } from '../scenes/CityScene';
 import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
@@ -41,6 +42,7 @@ export class GameManager {
   private enemy: EnemyController | null = null;
   private cameraController: CameraController;
   private uiSystem: UISystem;
+  private touchControls: TouchControls;
   private cityScene: CityScene;
   private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
   private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
@@ -56,6 +58,7 @@ export class GameManager {
     this.physicsWorld = new PhysicsWorld();
     this.cameraController = new CameraController(this.renderer.getCamera(), this.physicsWorld);
     this.uiSystem = new UISystem();
+    this.touchControls = new TouchControls();
     this.cityScene = new CityScene(this.renderer, this.physicsWorld);
   }
 
@@ -194,11 +197,28 @@ export class GameManager {
 
     this.survivalTimeRemaining -= deltaTime;
 
+    // Feed touch input (if a touch device) into the same pipeline as keyboard.
+    const onTouch = this.touchControls.isActive();
+    if (onTouch) {
+      const move = this.touchControls.getMove();
+      this.player.setMoveInput(move.x, move.forward);
+      this.player.setSprintInput(this.touchControls.isSprinting());
+      if (this.touchControls.consumeJump()) this.player.requestJump();
+      const pinch = this.touchControls.consumePinch();
+      if (pinch !== 0) this.cameraController.zoomBy(pinch);
+    }
+
     this.player.update(deltaTime);
 
     this.enemy.update(deltaTime);
 
-    this.cameraController.update(this.player.getModel().position, this.player.getSprintRatio());
+    // On touch, the camera auto-follows the player's heading (no manual orbit).
+    const followHeading = onTouch ? this.player.getHeading() : undefined;
+    this.cameraController.update(
+      this.player.getModel().position,
+      this.player.getSprintRatio(),
+      followHeading
+    );
 
     this.uiSystem.updateStamina(this.player.getStaminaRatio(), this.player.isExhausted());
 

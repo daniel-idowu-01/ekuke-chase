@@ -19,6 +19,12 @@ html, body {
   background-color: var(--bg-dark);
   color: var(--text);
   font-family: Arial, sans-serif;
+  /* Stop the browser from scrolling/zooming on touch so gestures reach the game. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {

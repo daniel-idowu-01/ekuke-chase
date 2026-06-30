@@ -12,6 +12,7 @@ export class CameraController {
   private currentLookAt: THREE.Vector3 = new THREE.Vector3();
   private targetDistance: number = CAMERA.DISTANCE;
   private currentDistance: number = CAMERA.DISTANCE;
+  private manualZoom: number = 0;
   private pitch: number = -0.35;
   private yaw: number = 0;
   private isMousePressed: boolean = false;
@@ -116,15 +117,29 @@ export class CameraController {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  update(playerPos?: THREE.Vector3, sprintRatio: number = 0): void {
+  update(playerPos?: THREE.Vector3, sprintRatio: number = 0, followHeading?: number): void {
     if (!this.targetPlayer && !playerPos) {
       return;
     }
 
     const followPos = playerPos || this.targetPlayer!.position;
 
-    this.updateKeyboardOrbit();
-    this.targetDistance = THREE.MathUtils.lerp(CAMERA.DISTANCE, CAMERA.SPRINT_DISTANCE, sprintRatio);
+    if (followHeading !== undefined) {
+      // Auto-follow (touch): swing the camera to sit behind the player's
+      // heading (yaw = heading + PI) using a shortest-arc lerp.
+      const targetYaw = followHeading + Math.PI;
+      let diff = ((targetYaw - this.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      this.yaw += diff * 0.08;
+    } else {
+      this.updateKeyboardOrbit();
+    }
+
+    this.targetDistance = THREE.MathUtils.clamp(
+      THREE.MathUtils.lerp(CAMERA.DISTANCE, CAMERA.SPRINT_DISTANCE, sprintRatio) + this.manualZoom,
+      2,
+      11
+    );
 
     const cameraOffset = new THREE.Vector3(
       Math.sin(this.yaw) * Math.cos(this.pitch) * this.currentDistance,
@@ -161,6 +176,11 @@ export class CameraController {
     }
 
     this.updateShake();
+  }
+
+  /** Pinch-to-zoom: positive = zoom out, negative = zoom in. */
+  zoomBy(delta: number): void {
+    this.manualZoom = VectorUtils.clamp(this.manualZoom + delta, -2.5, 4.5);
   }
 
   shake(intensity: number = CAMERA.SHAKE_INTENSITY): void {
