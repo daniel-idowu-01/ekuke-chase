@@ -16,8 +16,10 @@ export class Renderer {
     this.height = window.innerHeight;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(SCENE.BACKGROUND_COLOR);
-    this.scene.fog = new THREE.FogExp2(0x1c2430, 0.035);
+    // Bright sunny-day mood: vertical gradient sky + light atmospheric haze
+    // tinted to the horizon colour so distant geometry fades cleanly.
+    this.scene.background = this.createSkyTexture();
+    this.scene.fog = new THREE.FogExp2(0xcfe7ff, 0.014);
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -34,18 +36,24 @@ export class Renderer {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.05;
     const app = document.querySelector<HTMLDivElement>('#app');
     (app || document.body).appendChild(this.renderer.domElement);
 
+    // Sky-tinted ambient fill keeps shadows from going muddy under the sun.
     this.ambientLight = new THREE.AmbientLight(
-      0x9eb1c8,
+      0xbfd4ff,
       SCENE.AMBIENT_INTENSITY
     );
     this.scene.add(this.ambientLight);
 
+    // Hemisphere light fakes bounced light: warm sky from above, cool ground
+    // bounce from below. Cheap and sells the stylized daytime look.
+    const hemiLight = new THREE.HemisphereLight(0xeaf4ff, 0x8a8f7a, 0.55);
+    this.scene.add(hemiLight);
+
     this.directionalLight = new THREE.DirectionalLight(
-      0xffc982,
+      0xfff1d0,
       SCENE.LIGHT_INTENSITY
     );
     this.directionalLight.position.set(-12, 18, 10);
@@ -61,6 +69,24 @@ export class Renderer {
     this.scene.add(this.directionalLight);
 
     window.addEventListener('resize', () => this.onWindowResize());
+  }
+
+  private createSkyTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0.0, '#2f7fe0'); // zenith
+    gradient.addColorStop(0.55, '#7fb4ef');
+    gradient.addColorStop(1.0, '#d6ecff'); // horizon haze
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
   }
 
   getScene(): THREE.Scene {

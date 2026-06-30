@@ -48,13 +48,18 @@ export class PhysicsWorld {
   createStaticBody(
     position: THREE.Vector3,
     shape: 'box' | 'plane' = 'box',
-    size?: { width: number; height: number; depth: number }
+    size?: { width: number; height: number; depth: number },
+    rotation?: THREE.Quaternion
   ): RAPIER.RigidBodyHandle {
     const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
       position.x,
       position.y,
       position.z
     );
+
+    if (rotation) {
+      rigidBodyDesc.setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w });
+    }
 
     const rigidBody = this.world.createRigidBody(rigidBodyDesc);
 

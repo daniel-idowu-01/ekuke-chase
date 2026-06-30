@@ -6,7 +6,7 @@ import { EnemyController } from '../enemy/EnemyController';
 import { CameraController } from '../systems/CameraController';
 import { UISystem } from '../systems/UISystem';
 import { AnimationManager } from '../animation/AnimationManager';
-import { ArenaScene } from '../scenes/ArenaScene';
+import { CityScene } from '../scenes/CityScene';
 import { GAME, PHYSICS } from '../utils/Constants';
 
 
@@ -17,7 +17,7 @@ export class GameManager {
   private enemy: EnemyController | null = null;
   private cameraController: CameraController;
   private uiSystem: UISystem;
-  private arenaScene: ArenaScene;
+  private cityScene: CityScene;
   private gameOver: boolean = false;
   private survivalTimeRemaining: number = GAME.SURVIVAL_TIME;
 
@@ -30,13 +30,13 @@ export class GameManager {
     this.physicsWorld = new PhysicsWorld();
     this.cameraController = new CameraController(this.renderer.getCamera(), this.physicsWorld);
     this.uiSystem = new UISystem();
-    this.arenaScene = new ArenaScene(this.renderer, this.physicsWorld);
+    this.cityScene = new CityScene(this.renderer, this.physicsWorld);
   }
 
   async init(): Promise<void> {
     console.log('Initializing game...');
 
-    this.arenaScene.setup();
+    this.cityScene.setup();
 
     this.createPlayer();
 
