@@ -219,7 +219,12 @@ export class GameManager {
   private endGame(playerWon: boolean): void {
     this.gameOver = true;
 
-    this.uiSystem.showGameOver(playerWon, () => {
+    const survived = Math.min(
+      GAME.SURVIVAL_TIME,
+      Math.max(0, GAME.SURVIVAL_TIME - this.survivalTimeRemaining)
+    );
+
+    this.uiSystem.showGameOver(playerWon, survived, () => {
       void this.restart();
     });
   }
