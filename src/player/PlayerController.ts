@@ -27,6 +27,7 @@ export class PlayerController {
   private isGrounded: boolean = false;
   private wasGrounded: boolean = false;
   private isSprinting: boolean = false;
+  private autoSprint: boolean = false;
   // External (touch) analog input. When touchActive, the joystick vector drives
   // movement instead of the keyboard booleans. x = strafe, forward = +towards.
   private touchActive: boolean = false;
@@ -34,7 +35,12 @@ export class PlayerController {
   private touchMoveForward: number = 0;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
-  private facing: number = 0;
+  // Face into the screen (-z) at spawn so we see the robot's back, not its face.
+  private facing: number = Math.PI;
+  // Heading the player auto-runs along (auto-run mode); steered left/right.
+  private runHeading: number = Math.PI;
+  // Mouse steering for auto-run: cursor offset from screen centre, [-1, 1].
+  private mouseSteer: number = 0;
   private worldCamera: THREE.Camera | null = null;
   private footstepTimer: number = 0;
 
@@ -98,6 +104,17 @@ export class PlayerController {
       }
     });
 
+    // Mouse steering for auto-run: how far the cursor sits left/right of the
+    // screen centre (with a small deadzone); halfway to an edge = full turn.
+    document.addEventListener('mousemove', (e) => {
+      const raw = (e.clientX / window.innerWidth - 0.5) * 2;
+      const dead = 0.06;
+      const steer = Math.abs(raw) <= dead
+        ? 0
+        : (raw - Math.sign(raw) * dead) / (0.5 - dead);
+      this.mouseSteer = THREE.MathUtils.clamp(steer, -1, 1);
+    });
+
     document.addEventListener('keyup', (e) => {
       const key = e.key.toLowerCase();
       switch (key) {
@@ -133,11 +150,19 @@ export class PlayerController {
       this.onLand();
     }
 
-    const inputDirection = this.getInputDirection();
+    // Auto-run: move forward along a steerable heading. Otherwise: normal
+    // camera-relative WASD/joystick movement.
+    const inputDirection = this.autoSprint
+      ? this.getAutoRunDirection(deltaTime)
+      : this.getInputDirection();
 
-    // Sprint is only granted if the player is moving, grounded, and has
-    // stamina. The stamina component returns whether sprint is truly active.
-    const wantSprint = this.inputState.sprint && this.isGrounded && inputDirection.lengthSq() > 0;
+    // Sprint is granted while moving, grounded, and with stamina. Holding
+    // sprint OR auto-run both count as wanting to sprint; the stamina
+    // component returns whether sprint is truly active (else a jog).
+    const wantSprint =
+      (this.inputState.sprint || this.autoSprint) &&
+      this.isGrounded &&
+      inputDirection.lengthSq() > 0;
     this.isSprinting = this.stamina.update(deltaTime, wantSprint);
 
     this.updateMovement(inputDirection, deltaTime);
@@ -149,23 +174,52 @@ export class PlayerController {
 
     const speed = this.velocity.length();
     this.animationStateMachine.update(
-      inputDirection.length() > 0.1,
+      this.autoSprint || inputDirection.length() > 0.1,
       this.isSprinting,
       !this.isGrounded,
       speed
     );
 
-    if (this.velocity.lengthSq() > 0.05) {
+    if (this.autoSprint) {
+      // Heading is authoritative in auto-run; face it directly.
+      this.facing = this.runHeading;
+      this.applyFacing(deltaTime);
+    } else if (this.velocity.lengthSq() > 0.05) {
       this.facing = Math.atan2(this.velocity.x, this.velocity.z);
-      const targetQuaternion = new THREE.Quaternion();
-      targetQuaternion.setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        this.facing
-      );
-      this.model.quaternion.slerp(targetQuaternion, 1 - Math.exp(-PLAYER.ROTATION_SPEED * deltaTime));
+      this.applyFacing(deltaTime);
     }
 
     this.updateFootsteps(deltaTime);
+  }
+
+  /**
+   * Auto-run steering: left/right input rotates the run heading; the player
+   * always moves forward along it. Returns the world-space move direction.
+   */
+  private getAutoRunDirection(deltaTime: number): THREE.Vector3 {
+    let steer = 0;
+    if (this.touchActive) {
+      steer = this.touchMoveX;
+    } else {
+      if (this.inputState.moveLeft) steer -= 1;
+      if (this.inputState.moveRight) steer += 1;
+      // With no keys held, the mouse steers (move cursor left/right of centre).
+      if (steer === 0) steer = this.mouseSteer;
+    }
+
+    // Steering toward screen-right decreases the heading angle. Flip the sign
+    // here if left/right ever feel reversed.
+    this.runHeading -= steer * PLAYER.TURN_RATE * deltaTime;
+
+    return new THREE.Vector3(Math.sin(this.runHeading), 0, Math.cos(this.runHeading));
+  }
+
+  private applyFacing(deltaTime: number): void {
+    const targetQuaternion = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      this.facing
+    );
+    this.model.quaternion.slerp(targetQuaternion, 1 - Math.exp(-PLAYER.ROTATION_SPEED * deltaTime));
   }
 
   private getInputDirection(): THREE.Vector3 {
@@ -304,6 +358,13 @@ export class PlayerController {
 
   setSprintInput(active: boolean): void {
     this.inputState.sprint = active;
+  }
+
+  setAutoSprint(enabled: boolean): void {
+    // Seed the run heading from the current facing so enabling auto-run
+    // continues in the direction the player is already pointing.
+    if (enabled && !this.autoSprint) this.runHeading = this.facing;
+    this.autoSprint = enabled;
   }
 
   requestJump(): void {

@@ -6,6 +6,8 @@ export const PLAYER = {
   ACCELERATION: 18,
   DECELERATION: 14,
   ROTATION_SPEED: 10,
+  // Steering rate (radians/sec) when auto-run is on.
+  TURN_RATE: 2.8,
   JUMP_FORCE: 12,
   GROUND_DRAG: 0.1,
   AIR_DRAG: 0.02,

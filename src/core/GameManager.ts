@@ -41,6 +41,8 @@ export class GameManager {
   private player: PlayerController | null = null;
   private enemies: EnemyController[] = [];
   private dogCount: number = 1;
+  private autoSprint: boolean = false;
+  private static readonly AUTO_SPRINT_KEY = 'ekuke-chase:auto-sprint';
   private cameraController: CameraController;
   private uiSystem: UISystem;
   private touchControls: TouchControls;
@@ -61,6 +63,23 @@ export class GameManager {
     this.uiSystem = new UISystem();
     this.touchControls = new TouchControls();
     this.cityScene = new CityScene(this.renderer, this.physicsWorld);
+
+    try {
+      this.autoSprint = localStorage.getItem(GameManager.AUTO_SPRINT_KEY) === '1';
+    } catch {
+      this.autoSprint = false;
+    }
+  }
+
+  private setAutoSprint(enabled: boolean): void {
+    this.autoSprint = enabled;
+    try {
+      localStorage.setItem(GameManager.AUTO_SPRINT_KEY, enabled ? '1' : '0');
+    } catch {
+      // storage unavailable; keep the in-memory value
+    }
+    this.player?.setAutoSprint(enabled);
+    this.uiSystem.setAutoSprintDisplay(enabled);
   }
 
   async init(): Promise<void> {
@@ -73,6 +92,13 @@ export class GameManager {
     await this.createPlayer();
 
     this.cameraController.setTarget(this.player!.getModel());
+
+    // Auto-sprint toggle: HUD chip, the "T" key, and persisted preference.
+    this.uiSystem.bindAutoSprint(() => this.setAutoSprint(!this.autoSprint));
+    this.uiSystem.setAutoSprintDisplay(this.autoSprint);
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 't') this.setAutoSprint(!this.autoSprint);
+    });
 
     // Frame the player once so the scene shows behind the start menu, then let
     // the player choose how many dogs before the chase begins.
@@ -128,6 +154,7 @@ export class GameManager {
       animationManager,
       this.renderer.getCamera()
     );
+    this.player.setAutoSprint(this.autoSprint);
   }
 
   private async createEnemies(count: number): Promise<void> {
@@ -259,8 +286,9 @@ export class GameManager {
       if (enemy.hasCaughtPlayer()) caught = true;
     }
 
-    // On touch, the camera auto-follows the player's heading (no manual orbit).
-    const followHeading = onTouch ? this.player.getHeading() : undefined;
+    // Camera auto-follows the player's heading on touch and in auto-run mode
+    // (so steering reads naturally); otherwise manual mouse/keyboard orbit.
+    const followHeading = (onTouch || this.autoSprint) ? this.player.getHeading() : undefined;
     this.cameraController.update(
       this.player.getModel().position,
       this.player.getSprintRatio(),

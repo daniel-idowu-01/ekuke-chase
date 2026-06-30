@@ -5,6 +5,7 @@ export class UISystem {
   private container: HTMLDivElement;
   private staminaBar: HTMLElement;
   private staminaText: HTMLElement;
+  private autoSprintChip: HTMLElement;
   private timerText: HTMLElement;
   private objectiveText: HTMLElement;
   private fpsCounter: HTMLElement;
@@ -50,6 +51,15 @@ export class UISystem {
     this.staminaText.style.fontSize = `${UI.FONT_SIZE}px`;
     this.staminaText.textContent = 'Stamina';
     this.container.appendChild(this.staminaText);
+
+    this.autoSprintChip = document.createElement('div');
+    this.autoSprintChip.className = 'auto-sprint-chip';
+    this.autoSprintChip.style.position = 'absolute';
+    this.autoSprintChip.style.top = `${UI.PADDING + 78}px`;
+    this.autoSprintChip.style.left = `${UI.PADDING}px`;
+    this.autoSprintChip.style.pointerEvents = 'auto';
+    this.autoSprintChip.style.cursor = 'pointer';
+    this.container.appendChild(this.autoSprintChip);
 
     this.timerText = document.createElement('div');
     this.timerText.style.position = 'absolute';
@@ -208,6 +218,15 @@ export class UISystem {
           : '#00d26a';
     }
     this.staminaText.textContent = exhausted ? 'Exhausted!' : 'Stamina';
+  }
+
+  bindAutoSprint(onToggle: () => void): void {
+    this.autoSprintChip.onclick = onToggle;
+  }
+
+  setAutoSprintDisplay(enabled: boolean): void {
+    this.autoSprintChip.textContent = `🏃 Auto-Run: ${enabled ? 'ON' : 'OFF'}  (T)`;
+    this.autoSprintChip.classList.toggle('on', enabled);
   }
 
   updateFPS(deltaTime: number): void {
@@ -452,6 +471,17 @@ export class UISystem {
       .sm-btn:active { transform: translateY(0); }
       .sm-num { font-size: 30px; font-weight: 800; line-height: 1; }
       .sm-cap { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #aeb6c4; }
+
+      .auto-sprint-chip {
+        font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; font-weight: 700;
+        color: #c7ccd6; padding: 6px 12px; border-radius: 999px;
+        background: rgba(20,24,32,0.55); border: 1px solid rgba(255,255,255,0.14);
+        user-select: none; transition: all 0.12s ease; white-space: nowrap;
+      }
+      .auto-sprint-chip.on {
+        color: #06210f; background: linear-gradient(90deg, #6ff0a6, #36d07b);
+        border-color: rgba(54,208,123,0.8);
+      }
     `;
     document.head.appendChild(style);
   }
