@@ -39,7 +39,8 @@ export class GameManager {
   private renderer: Renderer;
   private physicsWorld: PhysicsWorld;
   private player: PlayerController | null = null;
-  private enemy: EnemyController | null = null;
+  private enemies: EnemyController[] = [];
+  private dogCount: number = 1;
   private cameraController: CameraController;
   private uiSystem: UISystem;
   private touchControls: TouchControls;
@@ -71,11 +72,24 @@ export class GameManager {
 
     await this.createPlayer();
 
-    await this.createEnemy();
-
     this.cameraController.setTarget(this.player!.getModel());
 
+    // Frame the player once so the scene shows behind the start menu, then let
+    // the player choose how many dogs before the chase begins.
+    this.cameraController.update(this.player!.getModel().position, 0);
+    this.renderer.render();
+
     console.log('Game initialized!');
+    this.uiSystem.showStartMenu((count) => {
+      void this.beginGame(count);
+    });
+  }
+
+  private async beginGame(count: number): Promise<void> {
+    this.dogCount = count;
+    await this.createEnemies(count);
+    this.survivalTimeRemaining = GAME.SURVIVAL_TIME;
+    this.gameOver = false;
     this.start();
   }
 
@@ -116,7 +130,32 @@ export class GameManager {
     );
   }
 
-  private async createEnemy(): Promise<void> {
+  private async createEnemies(count: number): Promise<void> {
+    this.enemies = [];
+    const spawns = this.dogSpawnPositions(count);
+    for (const spawn of spawns) {
+      const enemy = await this.createOneEnemy(spawn.x, spawn.z);
+      enemy.setTarget(this.player);
+      this.enemies.push(enemy);
+    }
+  }
+
+  /** Spread the dogs across the far side of the map so they fan out on you. */
+  private dogSpawnPositions(count: number): Array<{ x: number; z: number }> {
+    if (count <= 1) return [{ x: 0, z: 18 }];
+    if (count === 2) return [{ x: -9, z: 18 }, { x: 9, z: 18 }];
+    if (count === 3) return [{ x: 0, z: 20 }, { x: -13, z: 15 }, { x: 13, z: 15 }];
+
+    // 4+: fan evenly along the far side.
+    const positions: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1);
+      positions.push({ x: (t - 0.5) * 32, z: 14 + (i % 2) * 5 });
+    }
+    return positions;
+  }
+
+  private async createOneEnemy(spawnX: number, spawnZ: number): Promise<EnemyController> {
     const gltf = await this.enemyModel.instantiate();
     const character = gltf.scene;
     character.traverse((child) => {
@@ -151,13 +190,13 @@ export class GameManager {
 
     const root = new THREE.Group();
     root.add(character);
-    root.position.set(0, halfHeight, 18);
+    root.position.set(spawnX, halfHeight, spawnZ);
     this.renderer.add(root);
 
     const clips = remapAnimationClips(gltf.animations, ENEMY_ANIM_MAP);
     const animationManager = new AnimationManager(character, clips);
 
-    this.enemy = new EnemyController(
+    return new EnemyController(
       root,
       root.position.clone(),
       this.physicsWorld,
@@ -165,8 +204,6 @@ export class GameManager {
       dims,
       catchRadius
     );
-
-    this.enemy.setTarget(this.player);
   }
 
   private start(): void {
@@ -198,7 +235,7 @@ export class GameManager {
   }
 
   private update(deltaTime: number): void {
-    if (!this.player || !this.enemy) return;
+    if (!this.player) return;
     if (this.gameOver) return;
 
     this.survivalTimeRemaining -= deltaTime;
@@ -216,7 +253,11 @@ export class GameManager {
 
     this.player.update(deltaTime);
 
-    this.enemy.update(deltaTime);
+    let caught = false;
+    for (const enemy of this.enemies) {
+      enemy.update(deltaTime);
+      if (enemy.hasCaughtPlayer()) caught = true;
+    }
 
     // On touch, the camera auto-follows the player's heading (no manual orbit).
     const followHeading = onTouch ? this.player.getHeading() : undefined;
@@ -233,7 +274,7 @@ export class GameManager {
 
     if (this.survivalTimeRemaining <= 0) {
       this.endGame(true);
-    } else if (this.enemy.hasCaughtPlayer()) {
+    } else if (caught) {
       this.endGame(false);
     }
   }
@@ -263,16 +304,17 @@ export class GameManager {
       this.renderer.remove(this.player.getModel());
       this.player.cleanup();
     }
-    if (this.enemy) {
-      this.physicsWorld.destroyLinkedBody(this.enemy.getModel());
-      this.renderer.remove(this.enemy.getModel());
+    for (const enemy of this.enemies) {
+      this.physicsWorld.destroyLinkedBody(enemy.getModel());
+      this.renderer.remove(enemy.getModel());
     }
+    this.enemies = [];
 
     this.gameOver = false;
     this.survivalTimeRemaining = GAME.SURVIVAL_TIME;
 
     await this.createPlayer();
-    await this.createEnemy();
+    await this.createEnemies(this.dogCount);
 
     this.cameraController.setTarget(this.player!.getModel());
 

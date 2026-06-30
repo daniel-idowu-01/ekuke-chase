@@ -6,35 +6,35 @@ import { SCENE } from '../utils/Constants';
 type BoxSize = { width: number; height: number; depth: number };
 
 /**
- * Stylized city-block district (Subway-Surfers-leaning art direction).
+ * Stylized city district (Subway-Surfers-leaning) sized to the play area.
  *
- * Layout: two streets cross near the centre, dividing the 30x30 play area
- * into four themed blocks the player can freely roam and use for evasion:
- *   - NW: open market plaza (stalls, planters, crates)
- *   - NE: building block with a dead-end alley (dumpsters, crates, fence)
- *   - SW: loading dock with a raised platform reached by a ramp (verticality)
- *   - SE: parking lot (parked cars, low walls)
- * Buildings around the rim double as the world boundary. Every solid prop
- * gets a static collider via PhysicsWorld; pure decoration does not.
- *
- * Stage 1 = geometry only. Ambient life (pedestrians, birds, steam, signs,
- * traffic) is added in Stage 2; character redesign in Stage 3.
+ * Two wide avenues cross at the centre and act as clear running lanes,
+ * dividing the map into four large, mostly-open themed blocks the player can
+ * freely roam and use for evasion:
+ *   - NW: a park (fountain to circle, trees, benches) — lots of open ground
+ *   - NE: a building block with a dead-end alley (dumpsters, crates, fence)
+ *   - SW: a market plaza (stalls, planters, crates)
+ *   - SE: a parking lot + loading dock with a ramp (verticality)
+ * Cover is clustered toward block interiors so the streets stay open. Rim
+ * buildings form the world boundary. Every solid prop gets a static collider;
+ * pure decoration does not. Everything scales off SCENE.ARENA_SIZE.
  */
 export class CityScene {
   private renderer: Renderer;
   private physicsWorld: PhysicsWorld;
 
-  private readonly HALF = SCENE.ARENA_SIZE / 2; // 15
-
-  // Street footprint. Vertical avenue runs along Z; cross street along X.
-  private readonly AVENUE_HALF = 3.6;       // x in [-3.6, 3.6]
-  private readonly CROSS_MIN_Z = -1.8;
-  private readonly CROSS_MAX_Z = 3.6;
+  private readonly HALF = SCENE.ARENA_SIZE / 2;
+  private readonly AVENUE_HALF = 4.5;   // vertical avenue: x in [-4.5, 4.5]
+  private readonly CROSS_HALF = 4.5;    // horizontal avenue: z in [-4.5, 4.5]
+  // Quadrant centre distance from origin.
+  private readonly Q = (4.5 + SCENE.ARENA_SIZE / 2) / 2;
 
   private materials = {
     asphalt: new THREE.MeshStandardMaterial({ color: 0x44474f, roughness: 0.95 }),
     sidewalk: new THREE.MeshStandardMaterial({ color: 0x9a9da3, roughness: 0.92 }),
     plaza: new THREE.MeshStandardMaterial({ color: 0xc2a06a, roughness: 0.9 }),
+    grass: new THREE.MeshStandardMaterial({ color: 0x5a9e44, roughness: 0.97 }),
+    water: new THREE.MeshStandardMaterial({ color: 0x4ea3d6, roughness: 0.25, metalness: 0.1 }),
     curb: new THREE.MeshStandardMaterial({ color: 0xd9dbdf, roughness: 0.85 }),
     lineYellow: new THREE.MeshStandardMaterial({ color: 0xf2c23e, roughness: 0.6 }),
     lineWhite: new THREE.MeshStandardMaterial({ color: 0xeef1f4, roughness: 0.6 }),
@@ -47,6 +47,7 @@ export class CityScene {
     crate: new THREE.MeshStandardMaterial({ color: 0xc89352, roughness: 0.85 }),
     crateEdge: new THREE.MeshStandardMaterial({ color: 0x8a5e2c, roughness: 0.85 }),
     wood: new THREE.MeshStandardMaterial({ color: 0x7a5234, roughness: 0.86 }),
+    bark: new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 }),
     foliage: new THREE.MeshStandardMaterial({ color: 0x4f9a3f, roughness: 0.95 }),
     planter: new THREE.MeshStandardMaterial({ color: 0x7b5440, roughness: 0.9 }),
     glassDark: new THREE.MeshStandardMaterial({ color: 0x9fd4e6, roughness: 0.25, metalness: 0.1 }),
@@ -67,11 +68,11 @@ export class CityScene {
   setup(): void {
     this.createGround();
     this.createStreetMarkings();
-    this.createMarketPlaza();   // NW
-    this.createAlleyBlock();    // NE
-    this.createLoadingDock();   // SW
-    this.createParkingLot();    // SE
-    this.createPerimeterFill();
+    this.createParkBlock(-this.Q, -this.Q);       // NW
+    this.createAlleyBlock(this.Q, -this.Q);       // NE
+    this.createMarketBlock(-this.Q, this.Q);      // SW
+    this.createParkingBlock(this.Q, this.Q);      // SE
+    this.createPerimeter();
     this.createStreetLamps();
   }
 
@@ -81,9 +82,8 @@ export class CityScene {
     const scene = this.renderer.getScene();
     const size = SCENE.ARENA_SIZE;
 
-    // Base concrete slab (sidewalk colour) under everything.
     const base = new THREE.Mesh(
-      new THREE.BoxGeometry(size + 6, 1, size + 6),
+      new THREE.BoxGeometry(size + 10, 1, size + 10),
       this.materials.sidewalk
     );
     base.position.set(0, -0.5, 0);
@@ -92,19 +92,12 @@ export class CityScene {
     // Single flat floor collider (top at y = 0).
     this.physicsWorld.createStaticBody(new THREE.Vector3(0, -0.5, 0), 'plane');
 
-    // Asphalt streets laid just above the slab.
-    this.addFlat(this.materials.asphalt, 0, 0.02, 0, this.AVENUE_HALF * 2, size); // avenue (Z)
-    this.addFlat(
-      this.materials.asphalt,
-      0,
-      0.025,
-      (this.CROSS_MIN_Z + this.CROSS_MAX_Z) / 2,
-      size,
-      this.CROSS_MAX_Z - this.CROSS_MIN_Z
-    ); // cross street (X)
+    // Two wide avenues crossing at the centre.
+    this.addFlat(this.materials.asphalt, 0, 0.02, 0, this.AVENUE_HALF * 2, size);
+    this.addFlat(this.materials.asphalt, 0, 0.025, 0, size, this.CROSS_HALF * 2);
   }
 
-  /** A thin flat quad (used for road surfaces and paint). */
+  /** A thin flat quad (used for road surfaces, plazas, lawns and paint). */
   private addFlat(
     material: THREE.Material,
     x: number,
@@ -121,84 +114,112 @@ export class CityScene {
   }
 
   private createStreetMarkings(): void {
-    // Dashed centre line down the avenue.
-    for (let z = -this.HALF + 1; z < this.HALF; z += 2.2) {
-      if (z > this.CROSS_MIN_Z - 0.5 && z < this.CROSS_MAX_Z + 0.5) continue;
-      this.addFlat(this.materials.lineYellow, 0, 0.05, z, 0.18, 1.1);
+    // Dashed centre lines down both avenues, skipping the intersection.
+    for (let z = -this.HALF + 1.5; z < this.HALF; z += 3) {
+      if (Math.abs(z) < this.CROSS_HALF + 1) continue;
+      this.addFlat(this.materials.lineYellow, 0, 0.05, z, 0.2, 1.4);
+    }
+    for (let x = -this.HALF + 1.5; x < this.HALF; x += 3) {
+      if (Math.abs(x) < this.AVENUE_HALF + 1) continue;
+      this.addFlat(this.materials.lineYellow, x, 0.05, 0, 1.4, 0.2);
     }
 
-    // Crosswalk stripes on each approach to the intersection.
-    this.createCrosswalk(0, this.CROSS_MIN_Z - 0.9, true);
-    this.createCrosswalk(0, this.CROSS_MAX_Z + 0.9, true);
-    this.createCrosswalk(-this.AVENUE_HALF - 0.9, (this.CROSS_MIN_Z + this.CROSS_MAX_Z) / 2, false);
-    this.createCrosswalk(this.AVENUE_HALF + 0.9, (this.CROSS_MIN_Z + this.CROSS_MAX_Z) / 2, false);
+    this.createCrosswalk(0, -this.CROSS_HALF - 1, true);
+    this.createCrosswalk(0, this.CROSS_HALF + 1, true);
+    this.createCrosswalk(-this.AVENUE_HALF - 1, 0, false);
+    this.createCrosswalk(this.AVENUE_HALF + 1, 0, false);
   }
 
   private createCrosswalk(cx: number, cz: number, horizontal: boolean): void {
-    const stripes = 6;
+    const stripes = 7;
     for (let i = 0; i < stripes; i++) {
       const offset = (i - stripes / 2 + 0.5) * 0.5;
       if (horizontal) {
-        this.addFlat(this.materials.lineWhite, cx + offset, 0.05, cz, 0.32, 1.4);
+        this.addFlat(this.materials.lineWhite, cx + offset, 0.05, cz, 0.32, 1.6);
       } else {
-        this.addFlat(this.materials.lineWhite, cx, 0.05, cz + offset, 1.4, 0.32);
+        this.addFlat(this.materials.lineWhite, cx, 0.05, cz + offset, 1.6, 0.32);
       }
     }
   }
 
   // ---------------------------------------------------------------- blocks
 
-  /** NW: open market plaza. */
-  private createMarketPlaza(): void {
-    const cx = -9.2;
-    const cz = -8.6;
-    this.addFlat(this.materials.plaza, cx, 0.03, cz, 11.2, 11.6);
+  /** NW: open park with a central fountain to circle. */
+  private createParkBlock(cx: number, cz: number): void {
+    this.addFlat(this.materials.grass, cx, 0.03, cz, 17, 17);
 
-    // Backing buildings forming the NW perimeter corner.
-    this.createBuilding(-12.6, -12.4, 5.2, 5.4, 9.5);
-    this.createBuilding(-6.4, -13.0, 5.6, 4.4, 7.5);
+    this.createFountain(cx, cz);
 
-    // Market stalls with striped awnings.
-    this.createMarketStall(-11.5, -6.0, 0, 0xe2574c);
-    this.createMarketStall(-8.4, -7.6, Math.PI / 2, 0x4b86e2);
-    this.createMarketStall(-5.2, -5.4, 0, 0x57b36b);
+    const treeSpots = [
+      [-6.5, -6.5], [6.5, -6.5], [-6.5, 6.5], [6.5, 6.5],
+      [-7.5, 0.5], [7.5, -0.5], [0.5, -7.5], [-0.5, 7.5],
+    ];
+    for (const [ox, oz] of treeSpots) this.createTree(cx + ox, cz + oz);
 
-    // Planters + a few crates to break sightlines.
-    this.createPlanter(-12.4, -5.0);
-    this.createPlanter(-5.0, -10.0);
-    this.createCrateStack(-9.6, -10.6);
-    this.createCrate(-6.6, -9.2, 0.9, 0.4);
+    // Benches around the fountain (low, walkable-around cover).
+    this.createLowWall(cx - 3.4, cz, 0.5, 1.8, 0.45);
+    this.createLowWall(cx + 3.4, cz, 0.5, 1.8, 0.45);
+    this.createPlanter(cx - 4.5, cz + 4.5);
+    this.createPlanter(cx + 4.5, cz - 4.5);
   }
 
   /** NE: building block with a dead-end alley. */
-  private createAlleyBlock(): void {
-    // Two buildings with a gap between them = the alley (runs along Z).
-    this.createBuilding(7.0, -10.2, 5.4, 9.6, 9.0);
-    this.createBuilding(12.4, -9.6, 5.0, 11.0, 11.0);
-    this.createBuilding(9.8, -13.4, 6.4, 3.4, 8.0); // caps the back of the alley
+  private createAlleyBlock(cx: number, cz: number): void {
+    this.createBuilding(cx - 5.5, cz - 1, 5.5, 9, 9);
+    this.createBuilding(cx + 5.5, cz, 5, 10.5, 11);
+    this.createBuilding(cx, cz - 6.5, 7, 3.5, 8); // caps the back of the alley
 
-    // Alley floor (slightly grimy asphalt) between the two front buildings.
-    this.addFlat(this.materials.asphalt, 9.7, 0.03, -7.5, 2.6, 8.0);
+    this.addFlat(this.materials.asphalt, cx, 0.03, cz + 1, 3, 9);
 
-    // Alley clutter — gives the player tight cover to juke around.
-    this.createDumpster(8.9, -6.2, Math.PI / 2);
-    this.createDumpster(10.6, -9.4, Math.PI / 2);
-    this.createCrateStack(9.9, -11.0);
-    this.createFence(9.7, -4.4, 2.4, true); // low fence near the alley mouth
+    this.createDumpster(cx - 0.9, cz + 3, Math.PI / 2);
+    this.createDumpster(cx + 1.0, cz - 1.5, Math.PI / 2);
+    this.createCrateStack(cx, cz - 3.5);
+    this.createFence(cx, cz + 5.2, 3, true);
+
+    // A little open-yard cover near the block's outer corner.
+    this.createCrate(cx + 6, cz + 6, 1.0, 0.5);
+    this.createPlanter(cx - 6, cz + 5.5);
   }
 
-  /** SW: loading dock with a raised platform reached by a ramp. */
-  private createLoadingDock(): void {
-    // Warehouse building at the back.
-    this.createBuilding(-10.0, 12.6, 11.4, 4.6, 8.5);
+  /** SW: market plaza. */
+  private createMarketBlock(cx: number, cz: number): void {
+    this.addFlat(this.materials.plaza, cx, 0.03, cz, 16, 16);
+
+    this.createMarketStall(cx - 5, cz - 3, 0, this.carColors[0]);
+    this.createMarketStall(cx + 0.5, cz - 5, Math.PI / 2, this.carColors[1]);
+    this.createMarketStall(cx + 4.5, cz - 1, 0, this.carColors[3]);
+    this.createMarketStall(cx - 2, cz + 4.5, Math.PI / 2, this.carColors[2]);
+
+    this.createPlanter(cx + 5.5, cz + 5);
+    this.createPlanter(cx - 6, cz + 1);
+    this.createCrateStack(cx + 2, cz + 3);
+
+    this.createBuilding(cx - 6.5, cz + 7, 5, 5, 9);
+  }
+
+  /** SE: parking lot + loading dock with a ramp (verticality). */
+  private createParkingBlock(cx: number, cz: number): void {
+    this.addFlat(this.materials.asphalt, cx, 0.03, cz, 16, 16);
+
+    // Bay lines + parked cars.
+    for (let i = 0; i < 4; i++) {
+      this.addFlat(this.materials.lineWhite, cx - 5 + i * 2.6, 0.05, cz - 4, 0.12, 4.4);
+    }
+    this.createParkedCar(cx - 5, cz - 4, 0, this.carColors[0]);
+    this.createParkedCar(cx - 2.4, cz - 4, 0, this.carColors[1]);
+    this.createParkedCar(cx + 0.2, cz - 4, 0, this.carColors[3]);
+    this.createParkedCar(cx + 5, cz + 5, Math.PI, this.carColors[2]);
+
+    this.createLowWall(cx, cz - 7.6, 14, 0.4, 0.6);
+
+    // Loading dock at the back: building + raised platform + ramp.
+    this.createBuilding(cx, cz + 7.6, 13, 4.5, 9);
 
     const platTop = 1.0;
-    const platCx = -9.5;
-    const platCz = 8.6;
-    const platW = 8.5;
-    const platD = 4.2;
-
-    // Raised dock slab (walkable top).
+    const platCx = cx - 2;
+    const platCz = cz + 4;
+    const platW = 8;
+    const platD = 4;
     const platform = new THREE.Mesh(
       new THREE.BoxGeometry(platW, platTop, platD),
       this.materials.parapet
@@ -213,39 +234,9 @@ export class CityScene {
       { width: platW, height: platTop, depth: platD }
     );
 
-    // Ramp up to the platform (real, angled collider so the capsule climbs).
-    // It rises from the street (right) up toward the platform edge (left).
     this.createRamp(platCx + platW / 2 + 1.6, platCz, 2.4, 3.8, platTop);
-
-    // Dock clutter on top + at the base.
     this.createCrateStack(platCx - 2.4, platCz + 0.4);
     this.createCrate(platCx + 1.8, platCz - 0.2, 1.0, platTop + 0.5);
-    this.createCrate(-13.2, 6.2, 1.1, 0.55);
-  }
-
-  /** SE: parking lot. */
-  private createParkingLot(): void {
-    const cx = 9.4;
-    const cz = 9.0;
-    this.addFlat(this.materials.asphalt, cx, 0.03, cz, 11.0, 11.4);
-
-    // Corner building.
-    this.createBuilding(12.8, 12.6, 4.8, 4.8, 10.5);
-
-    // Parking bay lines.
-    for (let i = 0; i < 4; i++) {
-      this.addFlat(this.materials.lineWhite, 6.0 + i * 2.4, 0.05, 8.6, 0.12, 4.2);
-    }
-
-    // Parked cars (angled into the bays).
-    this.createParkedCar(7.2, 8.6, 0, this.carColors[0]);
-    this.createParkedCar(9.6, 8.6, 0, this.carColors[1]);
-    this.createParkedCar(12.0, 8.6, 0, this.carColors[3]);
-    this.createParkedCar(6.4, 13.0, Math.PI, this.carColors[2]);
-
-    // Low boundary walls + a planter.
-    this.createLowWall(9.4, 4.4, 8.0, 0.4, 0.6);
-    this.createPlanter(5.2, 5.6);
   }
 
   // ------------------------------------------------------------ structures
@@ -260,19 +251,14 @@ export class CityScene {
     body.receiveShadow = true;
     group.add(body);
 
-    // Flat roof cap + parapet rim for a clean silhouette.
     const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 0.98, 0.3, d * 0.98), this.materials.roof);
     roof.position.y = h + 0.1;
     roof.castShadow = true;
     group.add(roof);
 
     const parapetH = 0.45;
-    const parapet = new THREE.Mesh(
-      new THREE.BoxGeometry(w, parapetH, d),
-      this.materials.parapet
-    );
+    const parapet = new THREE.Mesh(new THREE.BoxGeometry(w, parapetH, d), this.materials.parapet);
     parapet.position.y = h + parapetH / 2;
-    // Hollow look via slightly smaller roof beneath is enough; keep it solid-cheap.
     group.add(parapet);
 
     group.position.set(x, 0, z);
@@ -285,6 +271,58 @@ export class CityScene {
     );
   }
 
+  private createTree(x: number, z: number): void {
+    const group = new THREE.Group();
+
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 1.9, 8), this.materials.bark);
+    trunk.position.y = 0.95;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    group.add(trunk);
+
+    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), this.materials.foliage);
+    crown.position.y = 2.6;
+    crown.scale.set(1.1, 1.25, 1.1);
+    crown.castShadow = true;
+    group.add(crown);
+
+    group.position.set(x, 0, z);
+    this.renderer.add(group);
+
+    this.physicsWorld.createStaticBody(
+      new THREE.Vector3(x, 0.95, z),
+      'box',
+      { width: 0.7, height: 1.9, depth: 0.7 }
+    );
+  }
+
+  private createFountain(x: number, z: number): void {
+    const group = new THREE.Group();
+    const radius = 2.3;
+
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 0.5, 18), this.materials.curb);
+    basin.position.y = 0.25;
+    basin.castShadow = true;
+    basin.receiveShadow = true;
+    group.add(basin);
+
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.82, radius * 0.82, 0.1, 18), this.materials.water);
+    water.position.y = 0.46;
+    group.add(water);
+
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 1.1, 10), this.materials.curb);
+    spout.position.y = 0.95;
+    spout.castShadow = true;
+    group.add(spout);
+
+    group.position.set(x, 0, z);
+    this.renderer.add(group);
+
+    // Slightly smaller box than the basin so you can brush the rim, not snag on corners.
+    const c = radius * 1.3;
+    this.physicsWorld.createStaticBody(new THREE.Vector3(x, 0.25, z), 'box', { width: c, height: 0.5, depth: c });
+  }
+
   private createMarketStall(x: number, z: number, rotationY: number, awningColor: number): void {
     const group = new THREE.Group();
 
@@ -295,36 +333,25 @@ export class CityScene {
     group.add(table);
 
     const postGeo = new THREE.BoxGeometry(0.1, 0.95, 0.1);
-    const postOffsets = [
-      [-1.0, -0.5], [1.0, -0.5], [-1.0, 0.5], [1.0, 0.5],
-    ];
-    for (const [ox, oz] of postOffsets) {
+    for (const [ox, oz] of [[-1.0, -0.5], [1.0, -0.5], [-1.0, 0.5], [1.0, 0.5]]) {
       const post = new THREE.Mesh(postGeo, this.materials.wood);
       post.position.set(ox, 0.47, oz);
       post.castShadow = true;
       group.add(post);
     }
 
-    // Striped awning (two slanted panels).
     const awningMat = new THREE.MeshStandardMaterial({ color: awningColor, roughness: 0.8 });
     const awningMatAlt = new THREE.MeshStandardMaterial({ color: 0xf3f3f3, roughness: 0.8 });
     for (let i = 0; i < 5; i++) {
-      const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(0.46, 0.04, 1.5),
-        i % 2 ? awningMat : awningMatAlt
-      );
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.04, 1.5), i % 2 ? awningMat : awningMatAlt);
       stripe.position.set(-1.0 + i * 0.5, 1.55, 0);
       stripe.rotation.x = -0.32;
       stripe.castShadow = true;
       group.add(stripe);
     }
 
-    // A couple of goods boxes on the table.
     for (let i = 0; i < 3; i++) {
-      const good = new THREE.Mesh(
-        new THREE.BoxGeometry(0.32, 0.32, 0.32),
-        i % 2 ? this.materials.crate : this.materials.foliage
-      );
+      const good = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), i % 2 ? this.materials.crate : this.materials.foliage);
       good.position.set(-0.7 + i * 0.7, 1.12, 0);
       good.castShadow = true;
       group.add(good);
@@ -334,7 +361,6 @@ export class CityScene {
     group.rotation.y = rotationY;
     this.renderer.add(group);
 
-    // Collider only around the solid table mass.
     const size: BoxSize = rotationY % Math.PI === 0
       ? { width: 2.2, height: 1.0, depth: 1.2 }
       : { width: 1.2, height: 1.0, depth: 2.2 };
@@ -383,12 +409,8 @@ export class CityScene {
     box.receiveShadow = true;
     group.add(box);
 
-    // Darker edge frame for the stylized crate read.
     const frameT = size * 0.12;
-    const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(size * 1.02, frameT, size * 1.02),
-      this.materials.crateEdge
-    );
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(size * 1.02, frameT, size * 1.02), this.materials.crateEdge);
     edge.position.y = size / 2 - frameT / 2;
     group.add(edge);
     const edge2 = edge.clone();
@@ -458,17 +480,12 @@ export class CityScene {
     wall.castShadow = true;
     wall.receiveShadow = true;
     this.renderer.add(wall);
-    this.physicsWorld.createStaticBody(
-      new THREE.Vector3(x, height / 2, z),
-      'box',
-      { width, height, depth }
-    );
+    this.physicsWorld.createStaticBody(new THREE.Vector3(x, height / 2, z), 'box', { width, height, depth });
   }
 
   private createFence(x: number, z: number, length: number, alongX: boolean): void {
     const group = new THREE.Group();
     const posts = Math.max(2, Math.round(length / 0.8));
-    const railLen = length;
 
     for (let i = 0; i <= posts; i++) {
       const t = (i / posts - 0.5) * length;
@@ -479,7 +496,7 @@ export class CityScene {
     }
     for (const ry of [0.32, 0.66]) {
       const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(alongX ? railLen : 0.06, 0.06, alongX ? 0.06 : railLen),
+        new THREE.BoxGeometry(alongX ? length : 0.06, 0.06, alongX ? 0.06 : length),
         this.materials.metalLight
       );
       rail.position.y = ry;
@@ -512,11 +529,7 @@ export class CityScene {
 
     group.position.set(x, 0, z);
     this.renderer.add(group);
-    this.physicsWorld.createStaticBody(
-      new THREE.Vector3(x, 0.3, z),
-      'box',
-      { width: 1.1, height: 0.6, depth: 1.1 }
-    );
+    this.physicsWorld.createStaticBody(new THREE.Vector3(x, 0.3, z), 'box', { width: 1.1, height: 0.6, depth: 1.1 });
   }
 
   private createRamp(x: number, z: number, width: number, length: number, height: number): void {
@@ -524,14 +537,11 @@ export class CityScene {
     const slabLen = Math.sqrt(height * height + length * length) + 0.2;
     const thickness = 0.25;
 
-    // Rotate about Z so the -X (platform-side) end lifts up to platform height
+    // Rotate about Z so the -X (platform-side) end lifts to platform height
     // while the +X (street-side) end meets the ground.
     const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -angle);
 
-    const ramp = new THREE.Mesh(
-      new THREE.BoxGeometry(slabLen, thickness, width),
-      this.materials.parapet
-    );
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(slabLen, thickness, width), this.materials.parapet);
     ramp.position.set(x, height / 2, z);
     ramp.quaternion.copy(quat);
     ramp.castShadow = true;
@@ -547,17 +557,15 @@ export class CityScene {
   }
 
   private createStreetLamps(): void {
+    const a = this.AVENUE_HALF + 0.8;
+    const c = this.CROSS_HALF + 0.8;
     const spots = [
-      [-this.AVENUE_HALF - 0.6, this.CROSS_MIN_Z - 0.6],
-      [this.AVENUE_HALF + 0.6, this.CROSS_MIN_Z - 0.6],
-      [-this.AVENUE_HALF - 0.6, this.CROSS_MAX_Z + 0.6],
-      [this.AVENUE_HALF + 0.6, this.CROSS_MAX_Z + 0.6],
-      [this.AVENUE_HALF + 0.6, -11.0],
-      [-this.AVENUE_HALF - 0.6, 11.0],
+      [-a, -c], [a, -c], [-a, c], [a, c],          // intersection corners
+      [a, -this.Q], [-a, this.Q],                   // along the avenue
+      [-this.Q, c], [this.Q, -c],                   // along the cross street
+      [a, this.HALF - 3], [-a, -this.HALF + 3],
     ];
-    for (const [x, z] of spots) {
-      this.createStreetLamp(x, z);
-    }
+    for (const [x, z] of spots) this.createStreetLamp(x, z);
   }
 
   private createStreetLamp(x: number, z: number): void {
@@ -578,31 +586,25 @@ export class CityScene {
     group.position.set(x, 0, z);
     this.renderer.add(group);
 
-    // Slim collider so the player can't walk through the pole.
-    this.physicsWorld.createStaticBody(
-      new THREE.Vector3(x, 1.6, z),
-      'box',
-      { width: 0.24, height: 3.2, depth: 0.24 }
-    );
+    this.physicsWorld.createStaticBody(new THREE.Vector3(x, 1.6, z), 'box', { width: 0.24, height: 3.2, depth: 0.24 });
   }
 
   /**
-   * Fill the rim with backdrop buildings so the world reads as a continuous
-   * city beyond the play area. The player is clamped to ~14 units, so these
-   * sit just outside that and act as the visual + physical boundary, leaving
-   * gaps where the streets exit the map.
+   * Rim buildings forming the world boundary, leaving gaps where the two
+   * avenues exit the map so it reads as a continuing city. The player is
+   * clamped to ~HALF-1, so these sit just outside reach.
    */
-  private createPerimeterFill(): void {
-    const edge = this.HALF + 1.4; // building centres just outside the play area
-    // North/South backdrop rows (skip the avenue gap around x = 0).
-    for (const z of [-edge, edge]) {
-      this.createBuilding(-10.5, z, 7, 4, 11 + Math.random() * 3);
-      this.createBuilding(10.5, z, 7, 4, 11 + Math.random() * 3);
-    }
-    // East/West backdrop rows (skip the cross-street gap around z ~ 1).
-    for (const x of [-edge, edge]) {
-      this.createBuilding(x, -10.5, 4, 7, 12 + Math.random() * 3);
-      this.createBuilding(x, 11.0, 4, 7, 12 + Math.random() * 3);
+  private createPerimeter(): void {
+    const edge = this.HALF + 1.5;
+    const along = [-this.Q - 4, -this.Q + 4, this.Q - 4, this.Q + 4];
+
+    for (const t of along) {
+      // North & south rows (skip the vertical-avenue gap near x = 0).
+      this.createBuilding(t, -edge, 7, 4, 11 + Math.random() * 4);
+      this.createBuilding(t, edge, 7, 4, 11 + Math.random() * 4);
+      // East & west rows (skip the cross-avenue gap near z = 0).
+      this.createBuilding(-edge, t, 4, 7, 12 + Math.random() * 4);
+      this.createBuilding(edge, t, 4, 7, 12 + Math.random() * 4);
     }
   }
 
@@ -610,18 +612,16 @@ export class CityScene {
 
   private buildFacadeMaterials(): void {
     const palettes: Array<[number, number]> = [
-      [0xd98c5f, 0x2b3a45], // terracotta + dark glass
-      [0x6fa8c9, 0x24323a], // teal
-      [0xe6c45c, 0x3a3320], // mustard
-      [0xb98bd1, 0x2e2438], // lavender
-      [0xcf5f5f, 0x33201f], // brick red
-      [0x8fb98f, 0x223026], // sage
+      [0xd98c5f, 0x2b3a45],
+      [0x6fa8c9, 0x24323a],
+      [0xe6c45c, 0x3a3320],
+      [0xb98bd1, 0x2e2438],
+      [0xcf5f5f, 0x33201f],
+      [0x8fb98f, 0x223026],
     ];
     for (const [base, glass] of palettes) {
       const texture = this.makeFacadeTexture(base, glass);
-      this.facadeMaterials.push(
-        new THREE.MeshStandardMaterial({ map: texture, roughness: 0.88 })
-      );
+      this.facadeMaterials.push(new THREE.MeshStandardMaterial({ map: texture, roughness: 0.88 }));
     }
   }
 
@@ -635,7 +635,6 @@ export class CityScene {
     ctx.fillStyle = hex(base);
     ctx.fillRect(0, 0, 256, 256);
 
-    // Window grid.
     const cols = 4;
     const rows = 5;
     const marginX = 22;
@@ -649,18 +648,15 @@ export class CityScene {
       for (let c = 0; c < cols; c++) {
         const wx = marginX + c * (cellW + gapX);
         const wy = marginY + r * (cellH + gapY);
-        // Occasionally a "lit" window for life.
         const lit = Math.random() < 0.18;
         ctx.fillStyle = lit ? '#ffe9a8' : hex(glass);
         ctx.fillRect(wx, wy, cellW, cellH);
-        // Frame.
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.lineWidth = 2;
         ctx.strokeRect(wx, wy, cellW, cellH);
       }
     }
 
-    // Ground-floor band (shopfront).
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.fillRect(0, 256 - 36, 256, 36);
 

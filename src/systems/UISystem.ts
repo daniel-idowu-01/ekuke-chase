@@ -18,6 +18,9 @@ export class UISystem {
   private goBestValue!: HTMLElement;
   private goRecord!: HTMLElement;
   private goButton!: HTMLButtonElement;
+  private startScreen!: HTMLElement;
+  private startBest!: HTMLElement;
+  private startButtons: Array<{ el: HTMLButtonElement; count: number }> = [];
   private fpsFrameCount: number = 0;
   private fpsDeltaTime: number = 0;
   private static readonly BEST_TIME_KEY = 'ekuke-chase:best-time';
@@ -80,6 +83,7 @@ export class UISystem {
     this.container.appendChild(this.fpsCounter);
 
     this.gameOverScreen = this.createGameOverScreen();
+    this.startScreen = this.createStartScreen();
   }
 
   private createHealthBar(id: string, isPlayer: boolean): HTMLElement {
@@ -262,6 +266,82 @@ export class UISystem {
     this.gameOverScreen.classList.remove('visible');
   }
 
+  private createStartScreen(): HTMLElement {
+    const screen = document.createElement('div');
+    screen.id = 'start-screen';
+    // Reuse the game-over overlay styling (and the 'go-overlay' hook that lets
+    // TouchControls ignore touches on menus).
+    screen.className = 'go-overlay';
+
+    const card = document.createElement('div');
+    card.className = 'go-card win';
+
+    const icon = document.createElement('div');
+    icon.className = 'go-icon';
+    icon.textContent = '🐕';
+
+    const title = document.createElement('h1');
+    title.className = 'go-title';
+    title.textContent = 'Ekuke Chase';
+
+    const sub = document.createElement('p');
+    sub.className = 'go-sub';
+    sub.textContent = 'How many dogs dare you outrun?';
+
+    const choices = document.createElement('div');
+    choices.className = 'sm-choices';
+    for (const count of [1, 2, 3]) {
+      const btn = document.createElement('button');
+      btn.className = 'sm-btn';
+      btn.innerHTML = `<span class="sm-num">${count}</span><span class="sm-cap">${count === 1 ? 'Dog' : 'Dogs'}</span>`;
+      choices.appendChild(btn);
+      this.startButtons.push({ el: btn, count });
+    }
+
+    const best = document.createElement('div');
+    best.className = 'go-hint';
+    this.startBest = best;
+
+    const hint = document.createElement('div');
+    hint.className = 'go-hint';
+    hint.textContent = 'Survive 60 seconds. Press 1 – 3';
+
+    card.appendChild(icon);
+    card.appendChild(title);
+    card.appendChild(sub);
+    card.appendChild(choices);
+    card.appendChild(best);
+    card.appendChild(hint);
+    screen.appendChild(card);
+    this.container.appendChild(screen);
+    return screen;
+  }
+
+  showStartMenu(onStart: (count: number) => void): void {
+    const best = this.getBestTime();
+    this.startBest.textContent = best > 0 ? `Best so far: ${this.formatTime(best)}` : '';
+
+    const choose = (count: number) => {
+      window.removeEventListener('keydown', onKey);
+      this.startScreen.classList.remove('visible');
+      onStart(count);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= this.startButtons.length) {
+        e.preventDefault();
+        choose(n);
+      }
+    };
+
+    for (const { el, count } of this.startButtons) {
+      el.onclick = () => choose(count);
+    }
+    window.addEventListener('keydown', onKey);
+
+    this.startScreen.classList.add('visible');
+  }
+
   private formatTime(seconds: number): string {
     return `${Math.max(0, seconds).toFixed(1)}s`;
   }
@@ -357,6 +437,21 @@ export class UISystem {
       .go-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
       .go-btn:active { transform: translateY(0); filter: brightness(0.95); }
       .go-hint { margin-top: 12px; font-size: 12px; color: #6c7589; }
+
+      .sm-choices { display: flex; gap: 12px; margin: 6px 0 4px; }
+      .sm-btn {
+        flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 16px 0; cursor: pointer; color: #fff;
+        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 14px; transition: transform 0.1s ease, background 0.1s ease, border-color 0.1s ease;
+      }
+      .sm-btn:hover {
+        transform: translateY(-2px);
+        background: rgba(54,208,123,0.18); border-color: rgba(54,208,123,0.6);
+      }
+      .sm-btn:active { transform: translateY(0); }
+      .sm-num { font-size: 30px; font-weight: 800; line-height: 1; }
+      .sm-cap { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #aeb6c4; }
     `;
     document.head.appendChild(style);
   }
