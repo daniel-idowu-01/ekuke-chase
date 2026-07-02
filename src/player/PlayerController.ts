@@ -145,7 +145,12 @@ export class PlayerController {
     this.animationManager.update(deltaTime);
 
     this.wasGrounded = this.isGrounded;
-    this.isGrounded = this.physicsWorld.isGrounded(this.bodyHandle);
+    // Tight ground probe: just past the capsule's feet (centre-to-feet + a
+    // small tolerance), so we only count as grounded when actually landed.
+    this.isGrounded = this.physicsWorld.isGrounded(
+      this.bodyHandle,
+      PLAYER.CAPSULE_HALF_HEIGHT + PLAYER.CAPSULE_RADIUS + 0.12
+    );
     if (!this.wasGrounded && this.isGrounded) {
       this.onLand();
     }
@@ -167,8 +172,13 @@ export class PlayerController {
 
     this.updateMovement(inputDirection, deltaTime);
 
-    if (this.inputState.jump && this.isGrounded) {
-      this.jump();
+    if (this.inputState.jump) {
+      // Only jump from the ground and when not already rising — prevents
+      // stacking impulses mid-air to climb onto rooftops.
+      const verticalVelocity = this.physicsWorld.getVelocity(this.bodyHandle).y;
+      if (this.isGrounded && verticalVelocity <= 0.1) {
+        this.jump();
+      }
       this.inputState.jump = false;
     }
 

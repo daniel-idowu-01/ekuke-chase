@@ -8,7 +8,10 @@ export const PLAYER = {
   ROTATION_SPEED: 10,
   // Steering rate (radians/sec) when auto-run is on.
   TURN_RATE: 2.8,
-  JUMP_FORCE: 12,
+  // Small hop only (~0.8 units peak = 4^2 / (2*9.81)). Keeps the jump for
+  // clearing low props but stops players reaching rooftops/ledges to camp
+  // where the ground-based dog can't follow.
+  JUMP_FORCE: 4,
   GROUND_DRAG: 0.1,
   AIR_DRAG: 0.02,
   MASS: 1,

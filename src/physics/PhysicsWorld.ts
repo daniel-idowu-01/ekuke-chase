@@ -176,7 +176,7 @@ export class PhysicsWorld {
     return new THREE.Quaternion();
   }
 
-  isGrounded(bodyHandle: RAPIER.RigidBodyHandle): boolean {
+  isGrounded(bodyHandle: RAPIER.RigidBodyHandle, maxToi: number = 1.15): boolean {
     const body = this.world.getRigidBody(bodyHandle);
     if (!body) return false;
 
@@ -185,7 +185,10 @@ export class PhysicsWorld {
       new RAPIER.Vector3(pos.x, pos.y, pos.z),
       new RAPIER.Vector3(0, -1, 0)
     );
-    const hit = this.world.castRay(ray, 1.15, true);
+    // Exclude the body's own collider, otherwise the ray starts inside the
+    // capsule and self-hits at toi 0 — making the entity read as "grounded"
+    // even mid-air (which allowed infinite mid-air re-jumps).
+    const hit = this.world.castRay(ray, maxToi, true, undefined, undefined, undefined, body);
     return hit !== null;
   }
 
