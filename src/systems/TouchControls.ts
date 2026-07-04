@@ -16,7 +16,6 @@ interface TrackedTouch {
  */
 export class TouchControls {
   private root: HTMLDivElement;
-  // Assigned inside buildDom(), called from the constructor.
   private joyBase!: HTMLDivElement;
   private joyKnob!: HTMLDivElement;
   private sprintBtn!: HTMLDivElement;
@@ -48,7 +47,6 @@ export class TouchControls {
     document.addEventListener('touchcancel', this.onTouchEnd, { passive: true });
   }
 
-  // ---- public read API (polled by GameManager each frame) ----
 
   isActive(): boolean {
     return this.active;
@@ -77,12 +75,10 @@ export class TouchControls {
     return delta;
   }
 
-  // ---- touch handling ----
 
   private onTouchStart = (e: TouchEvent): void => {
     this.reveal();
     for (const t of Array.from(e.changedTouches)) {
-      // Let touches on the game-over screen behave normally (button taps).
       if ((t.target as HTMLElement | null)?.closest('.go-overlay')) continue;
 
       const role = this.classify(t.clientX, t.clientY);
@@ -164,7 +160,7 @@ export class TouchControls {
       this.moveForward = 0;
     } else {
       this.moveX = kx / this.maxRadius;
-      this.moveForward = -ky / this.maxRadius; // up on screen = forward
+      this.moveForward = -ky / this.maxRadius;
     }
   }
 
@@ -176,7 +172,6 @@ export class TouchControls {
     if (free.length >= 2) {
       const d = Math.hypot(free[0].x - free[1].x, free[0].y - free[1].y);
       if (this.lastPinchDist !== null) {
-        // Fingers apart -> zoom in (negative); together -> zoom out (positive).
         this.pinchDelta += -(d - this.lastPinchDist) * 0.012;
       }
       this.lastPinchDist = d;
@@ -205,7 +200,6 @@ export class TouchControls {
     this.joyKnob.classList.remove('on');
   }
 
-  // ---- DOM / styles ----
 
   private buildDom(): HTMLDivElement {
     const root = document.createElement('div');

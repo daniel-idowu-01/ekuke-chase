@@ -6,7 +6,6 @@ export const PLAYER = {
   ACCELERATION: 18,
   DECELERATION: 14,
   ROTATION_SPEED: 10,
-  // Steering rate (radians/sec) when auto-run is on.
   TURN_RATE: 2.8,
   // Small hop only (~0.8 units peak = 4^2 / (2*9.81)). Keeps the jump for
   // clearing low props but stops players reaching rooftops/ledges to camp
@@ -22,10 +21,6 @@ export const PLAYER = {
   CAPSULE_RADIUS: 0.28,
 };
 
-// Sprint stamina. Drain/regen are in stamina-units per second; MAX is the
-// pool size, so MAX / DRAIN ~ seconds of continuous sprint.
-// Tuned for escapability: ~6.7s of sprint, quick recovery so the player can
-// repeatedly open a gap instead of being permanently winded.
 export const STAMINA = {
   MAX: 100,
   DRAIN_RATE: 15,
@@ -35,25 +30,18 @@ export const STAMINA = {
 };
 
 export const ENEMY = {
-  // Chase speed sits just under the player's base run (PLAYER.SPEED 7), so
-  // jogging holds even-to-slightly-ahead and a sprint (11) clearly escapes.
-  // The dog is still a threat on turns/obstacles where the player loses speed.
   SPEED: 6.8,
   PATROL_SPEED: 2.6,
   ACCELERATION: 13,
   DECELERATION: 9,
   ROTATION_SPEED: 7,
   MASS: 1,
-  // Target visual height (world units) the wolf GLB is scaled to. Its box
-  // collider is derived from the scaled bounding box at load time.
   MODEL_HEIGHT: 0.85,
-  // Behaviour radii (world units). The arena spans roughly -25..25.
   DETECTION_RADIUS: 15,
   // Reachable lose-interest: break ~18 units away for 2.5s and the dog gives
   // up and returns to patrol, granting a real breather in the larger map.
   LOSE_INTEREST_RADIUS: 18,
   CATCH_RADIUS: 0.9,
-  // State timings (seconds).
   IDLE_DURATION: 1.8,
   ALERT_DURATION: 0.65,
   LOSE_INTEREST_TIME: 2.5,

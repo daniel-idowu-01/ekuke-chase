@@ -30,7 +30,6 @@ export class CharacterModel {
     if (!this.buffer) {
       return Promise.reject(new Error(`Model "${this.url}" not preloaded; call preload() first.`));
     }
-    // Parse a copy so repeated instantiations never share/consume a buffer.
     const data = this.buffer.slice(0);
     return new Promise<GLTF>((resolve, reject) => {
       CharacterModel.loader.parse(data, '', resolve, reject);

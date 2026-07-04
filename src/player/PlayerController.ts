@@ -28,18 +28,13 @@ export class PlayerController {
   private wasGrounded: boolean = false;
   private isSprinting: boolean = false;
   private autoSprint: boolean = false;
-  // External (touch) analog input. When touchActive, the joystick vector drives
-  // movement instead of the keyboard booleans. x = strafe, forward = +towards.
   private touchActive: boolean = false;
   private touchMoveX: number = 0;
   private touchMoveForward: number = 0;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private desiredVelocity: THREE.Vector3 = new THREE.Vector3();
-  // Face into the screen (-z) at spawn so we see the robot's back, not its face.
   private facing: number = Math.PI;
-  // Heading the player auto-runs along (auto-run mode); steered left/right.
   private runHeading: number = Math.PI;
-  // Mouse steering for auto-run: cursor offset from screen centre, [-1, 1].
   private mouseSteer: number = 0;
   private worldCamera: THREE.Camera | null = null;
   private footstepTimer: number = 0;
@@ -104,8 +99,6 @@ export class PlayerController {
       }
     });
 
-    // Mouse steering for auto-run: how far the cursor sits left/right of the
-    // screen centre (with a small deadzone); halfway to an edge = full turn.
     document.addEventListener('mousemove', (e) => {
       const raw = (e.clientX / window.innerWidth - 0.5) * 2;
       const dead = 0.06;
@@ -155,15 +148,10 @@ export class PlayerController {
       this.onLand();
     }
 
-    // Auto-run: move forward along a steerable heading. Otherwise: normal
-    // camera-relative WASD/joystick movement.
     const inputDirection = this.autoSprint
       ? this.getAutoRunDirection(deltaTime)
       : this.getInputDirection();
 
-    // Sprint is granted while moving, grounded, and with stamina. Holding
-    // sprint OR auto-run both count as wanting to sprint; the stamina
-    // component returns whether sprint is truly active (else a jog).
     const wantSprint =
       (this.inputState.sprint || this.autoSprint) &&
       this.isGrounded &&
@@ -191,7 +179,6 @@ export class PlayerController {
     );
 
     if (this.autoSprint) {
-      // Heading is authoritative in auto-run; face it directly.
       this.facing = this.runHeading;
       this.applyFacing(deltaTime);
     } else if (this.velocity.lengthSq() > 0.05) {
@@ -213,12 +200,9 @@ export class PlayerController {
     } else {
       if (this.inputState.moveLeft) steer -= 1;
       if (this.inputState.moveRight) steer += 1;
-      // With no keys held, the mouse steers (move cursor left/right of centre).
       if (steer === 0) steer = this.mouseSteer;
     }
 
-    // Steering toward screen-right decreases the heading angle. Flip the sign
-    // here if left/right ever feel reversed.
     this.runHeading -= steer * PLAYER.TURN_RATE * deltaTime;
 
     return new THREE.Vector3(Math.sin(this.runHeading), 0, Math.cos(this.runHeading));
@@ -236,8 +220,6 @@ export class PlayerController {
     const direction = new THREE.Vector3();
 
     if (this.touchActive) {
-      // Joystick: forward (+) is "away from camera", matching the keyboard's
-      // moveForward = -z convention below.
       direction.x = this.touchMoveX;
       direction.z = -this.touchMoveForward;
     } else {

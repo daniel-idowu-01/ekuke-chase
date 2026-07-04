@@ -16,8 +16,6 @@ export class Renderer {
     this.height = window.innerHeight;
 
     this.scene = new THREE.Scene();
-    // Bright sunny-day mood: vertical gradient sky + light atmospheric haze
-    // tinted to the horizon colour so distant geometry fades cleanly.
     this.scene.background = this.createSkyTexture();
     this.scene.fog = new THREE.FogExp2(0xcfe7ff, 0.014);
 
@@ -40,15 +38,12 @@ export class Renderer {
     const app = document.querySelector<HTMLDivElement>('#app');
     (app || document.body).appendChild(this.renderer.domElement);
 
-    // Sky-tinted ambient fill keeps shadows from going muddy under the sun.
     this.ambientLight = new THREE.AmbientLight(
       0xbfd4ff,
       SCENE.AMBIENT_INTENSITY
     );
     this.scene.add(this.ambientLight);
 
-    // Hemisphere light fakes bounced light: warm sky from above, cool ground
-    // bounce from below. Cheap and sells the stylized daytime look.
     const hemiLight = new THREE.HemisphereLight(0xeaf4ff, 0x8a8f7a, 0.55);
     this.scene.add(hemiLight);
 
@@ -77,9 +72,9 @@ export class Renderer {
     canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
     const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0.0, '#2f7fe0'); // zenith
+    gradient.addColorStop(0.0, '#2f7fe0');
     gradient.addColorStop(0.55, '#7fb4ef');
-    gradient.addColorStop(1.0, '#d6ecff'); // horizon haze
+    gradient.addColorStop(1.0, '#d6ecff');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 2, 256);
 

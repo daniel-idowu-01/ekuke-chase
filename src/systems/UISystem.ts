@@ -10,7 +10,6 @@ export class UISystem {
   private objectiveText: HTMLElement;
   private fpsCounter: HTMLElement;
   private gameOverScreen: HTMLElement;
-  // Assigned inside createGameOverScreen(), called from the constructor.
   private goCard!: HTMLElement;
   private goIcon!: HTMLElement;
   private goTitle!: HTMLElement;
@@ -144,7 +143,6 @@ export class UISystem {
     const sub = document.createElement('p');
     sub.className = 'go-sub';
 
-    // Stats row: time survived (primary) + best time.
     const stats = document.createElement('div');
     stats.className = 'go-stats';
 
@@ -210,7 +208,6 @@ export class UISystem {
     const fill = this.staminaBar.querySelector('.health-fill') as HTMLElement;
     if (fill) {
       fill.style.width = `${clamped * 100}%`;
-      // Exhausted: red. Low but recovering: amber. Otherwise green.
       fill.style.backgroundColor = exhausted
         ? '#ff3b30'
         : clamped < 0.35
@@ -288,8 +285,6 @@ export class UISystem {
   private createStartScreen(): HTMLElement {
     const screen = document.createElement('div');
     screen.id = 'start-screen';
-    // Reuse the game-over overlay styling (and the 'go-overlay' hook that lets
-    // TouchControls ignore touches on menus).
     screen.className = 'go-overlay';
 
     const card = document.createElement('div');
@@ -375,7 +370,6 @@ export class UISystem {
     try {
       localStorage.setItem(UISystem.BEST_TIME_KEY, seconds.toFixed(2));
     } catch {
-      // Ignore storage being unavailable (private mode, etc.).
     }
   }
 

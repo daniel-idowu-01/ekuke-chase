@@ -11,9 +11,6 @@ import { CityScene } from '../scenes/CityScene';
 import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
 import { GAME, PHYSICS, PLAYER, ENEMY } from '../utils/Constants';
 
-// Maps the player GLB's own clip names onto the game's state vocabulary.
-// RobotExpressive.glb (CC0, Tomás Laulhé / Don McCurdy) ships Idle/Walking/
-// Running/Jump; run + sprint share "Running" (sprint is just played faster).
 const PLAYER_ANIM_MAP: Record<string, string> = {
   idle: 'Idle',
   walk: 'Walking',
@@ -22,9 +19,6 @@ const PLAYER_ANIM_MAP: Record<string, string> = {
   jump: 'Jump',
 };
 
-// Maps the wolf GLB's clip names onto the game's state vocabulary.
-// Wolf.glb (CC0, Quaternius via Poly Pizza) ships Idle/Walk/Gallop/Attack/...
-// Gallop is the fast gait (run + chase); Attack is the one-shot catch lunge.
 const ENEMY_ANIM_MAP: Record<string, string> = {
   idle: 'Idle',
   walk: 'Walk',
@@ -76,7 +70,6 @@ export class GameManager {
     try {
       localStorage.setItem(GameManager.AUTO_SPRINT_KEY, enabled ? '1' : '0');
     } catch {
-      // storage unavailable; keep the in-memory value
     }
     this.player?.setAutoSprint(enabled);
     this.uiSystem.setAutoSprintDisplay(enabled);
@@ -93,15 +86,12 @@ export class GameManager {
 
     this.cameraController.setTarget(this.player!.getModel());
 
-    // Auto-sprint toggle: HUD chip, the "T" key, and persisted preference.
     this.uiSystem.bindAutoSprint(() => this.setAutoSprint(!this.autoSprint));
     this.uiSystem.setAutoSprintDisplay(this.autoSprint);
     window.addEventListener('keydown', (e) => {
       if (e.key.toLowerCase() === 't') this.setAutoSprint(!this.autoSprint);
     });
 
-    // Frame the player once so the scene shows behind the start menu, then let
-    // the player choose how many dogs before the chase begins.
     this.cameraController.update(this.player!.getModel().position, 0);
     this.renderer.render();
 
@@ -138,7 +128,6 @@ export class GameManager {
     // (forward = +Z). Flip to Math.PI here if a model ends up facing backward.
     character.rotation.y = 0;
 
-    // Parent group is what physics drives + the controller rotates.
     const root = new THREE.Group();
     root.add(character);
     root.position.set(0, capsuleHalf, -18);
@@ -167,13 +156,11 @@ export class GameManager {
     }
   }
 
-  /** Spread the dogs across the far side of the map so they fan out on you. */
   private dogSpawnPositions(count: number): Array<{ x: number; z: number }> {
     if (count <= 1) return [{ x: 0, z: 18 }];
     if (count === 2) return [{ x: -9, z: 18 }, { x: 9, z: 18 }];
     if (count === 3) return [{ x: 0, z: 20 }, { x: -13, z: 15 }, { x: 13, z: 15 }];
 
-    // 4+: fan evenly along the far side.
     const positions: Array<{ x: number; z: number }> = [];
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
@@ -192,7 +179,6 @@ export class GameManager {
       }
     });
 
-    // The box collider's vertical half-extent equals half the target height.
     const halfHeight = ENEMY.MODEL_HEIGHT / 2;
     fitToHeight(character, ENEMY.MODEL_HEIGHT, -halfHeight);
 
@@ -242,7 +228,6 @@ export class GameManager {
     requestAnimationFrame(this.gameLoop);
 
     const currentTime = performance.now();
-    // Clamp delta time so tab switches or frame stalls do not explode movement.
     const deltaTime = Math.min((currentTime - this.lastFrameTime) / 1000, 0.016);
     this.lastFrameTime = currentTime;
 
@@ -267,7 +252,6 @@ export class GameManager {
 
     this.survivalTimeRemaining -= deltaTime;
 
-    // Feed touch input (if a touch device) into the same pipeline as keyboard.
     const onTouch = this.touchControls.isActive();
     if (onTouch) {
       const move = this.touchControls.getMove();
@@ -286,8 +270,6 @@ export class GameManager {
       if (enemy.hasCaughtPlayer()) caught = true;
     }
 
-    // Camera auto-follows the player's heading on touch and in auto-run mode
-    // (so steering reads naturally); otherwise manual mouse/keyboard orbit.
     const followHeading = (onTouch || this.autoSprint) ? this.player.getHeading() : undefined;
     this.cameraController.update(
       this.player.getModel().position,

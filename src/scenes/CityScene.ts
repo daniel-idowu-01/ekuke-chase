@@ -24,9 +24,8 @@ export class CityScene {
   private physicsWorld: PhysicsWorld;
 
   private readonly HALF = SCENE.ARENA_SIZE / 2;
-  private readonly AVENUE_HALF = 4.5;   // vertical avenue: x in [-4.5, 4.5]
-  private readonly CROSS_HALF = 4.5;    // horizontal avenue: z in [-4.5, 4.5]
-  // Quadrant centre distance from origin.
+  private readonly AVENUE_HALF = 4.5;
+  private readonly CROSS_HALF = 4.5;
   private readonly Q = (4.5 + SCENE.ARENA_SIZE / 2) / 2;
 
   private materials = {
@@ -68,15 +67,14 @@ export class CityScene {
   setup(): void {
     this.createGround();
     this.createStreetMarkings();
-    this.createParkBlock(-this.Q, -this.Q);       // NW
-    this.createAlleyBlock(this.Q, -this.Q);       // NE
-    this.createMarketBlock(-this.Q, this.Q);      // SW
-    this.createParkingBlock(this.Q, this.Q);      // SE
+    this.createParkBlock(-this.Q, -this.Q);
+    this.createAlleyBlock(this.Q, -this.Q);
+    this.createMarketBlock(-this.Q, this.Q);
+    this.createParkingBlock(this.Q, this.Q);
     this.createPerimeter();
     this.createStreetLamps();
   }
 
-  // ---------------------------------------------------------------- ground
 
   private createGround(): void {
     const scene = this.renderer.getScene();
@@ -89,15 +87,12 @@ export class CityScene {
     base.position.set(0, -0.5, 0);
     base.receiveShadow = true;
     scene.add(base);
-    // Single flat floor collider (top at y = 0).
     this.physicsWorld.createStaticBody(new THREE.Vector3(0, -0.5, 0), 'plane');
 
-    // Two wide avenues crossing at the centre.
     this.addFlat(this.materials.asphalt, 0, 0.02, 0, this.AVENUE_HALF * 2, size);
     this.addFlat(this.materials.asphalt, 0, 0.025, 0, size, this.CROSS_HALF * 2);
   }
 
-  /** A thin flat quad (used for road surfaces, plazas, lawns and paint). */
   private addFlat(
     material: THREE.Material,
     x: number,
@@ -114,7 +109,6 @@ export class CityScene {
   }
 
   private createStreetMarkings(): void {
-    // Dashed centre lines down both avenues, skipping the intersection.
     for (let z = -this.HALF + 1.5; z < this.HALF; z += 3) {
       if (Math.abs(z) < this.CROSS_HALF + 1) continue;
       this.addFlat(this.materials.lineYellow, 0, 0.05, z, 0.2, 1.4);
@@ -142,9 +136,7 @@ export class CityScene {
     }
   }
 
-  // ---------------------------------------------------------------- blocks
 
-  /** NW: open park with a central fountain to circle. */
   private createParkBlock(cx: number, cz: number): void {
     this.addFlat(this.materials.grass, cx, 0.03, cz, 17, 17);
 
@@ -156,18 +148,16 @@ export class CityScene {
     ];
     for (const [ox, oz] of treeSpots) this.createTree(cx + ox, cz + oz);
 
-    // Benches around the fountain (low, walkable-around cover).
     this.createLowWall(cx - 3.4, cz, 0.5, 1.8, 0.45);
     this.createLowWall(cx + 3.4, cz, 0.5, 1.8, 0.45);
     this.createPlanter(cx - 4.5, cz + 4.5);
     this.createPlanter(cx + 4.5, cz - 4.5);
   }
 
-  /** NE: building block with a dead-end alley. */
   private createAlleyBlock(cx: number, cz: number): void {
     this.createBuilding(cx - 5.5, cz - 1, 5.5, 9, 9);
     this.createBuilding(cx + 5.5, cz, 5, 10.5, 11);
-    this.createBuilding(cx, cz - 6.5, 7, 3.5, 8); // caps the back of the alley
+    this.createBuilding(cx, cz - 6.5, 7, 3.5, 8);
 
     this.addFlat(this.materials.asphalt, cx, 0.03, cz + 1, 3, 9);
 
@@ -176,12 +166,10 @@ export class CityScene {
     this.createCrateStack(cx, cz - 3.5);
     this.createFence(cx, cz + 5.2, 3, true);
 
-    // A little open-yard cover near the block's outer corner.
     this.createCrate(cx + 6, cz + 6, 1.0, 0.5);
     this.createPlanter(cx - 6, cz + 5.5);
   }
 
-  /** SW: market plaza. */
   private createMarketBlock(cx: number, cz: number): void {
     this.addFlat(this.materials.plaza, cx, 0.03, cz, 16, 16);
 
@@ -197,11 +185,9 @@ export class CityScene {
     this.createBuilding(cx - 6.5, cz + 7, 5, 5, 9);
   }
 
-  /** SE: parking lot + loading dock with a ramp (verticality). */
   private createParkingBlock(cx: number, cz: number): void {
     this.addFlat(this.materials.asphalt, cx, 0.03, cz, 16, 16);
 
-    // Bay lines + parked cars.
     for (let i = 0; i < 4; i++) {
       this.addFlat(this.materials.lineWhite, cx - 5 + i * 2.6, 0.05, cz - 4, 0.12, 4.4);
     }
@@ -212,7 +198,6 @@ export class CityScene {
 
     this.createLowWall(cx, cz - 7.6, 14, 0.4, 0.6);
 
-    // Loading dock at the back: building + raised platform + ramp.
     this.createBuilding(cx, cz + 7.6, 13, 4.5, 9);
 
     const platTop = 1.0;
@@ -239,7 +224,6 @@ export class CityScene {
     this.createCrate(platCx + 1.8, platCz - 0.2, 1.0, platTop + 0.5);
   }
 
-  // ------------------------------------------------------------ structures
 
   private createBuilding(x: number, z: number, w: number, d: number, h: number): void {
     const group = new THREE.Group();
@@ -318,7 +302,6 @@ export class CityScene {
     group.position.set(x, 0, z);
     this.renderer.add(group);
 
-    // Slightly smaller box than the basin so you can brush the rim, not snag on corners.
     const c = radius * 1.3;
     this.physicsWorld.createStaticBody(new THREE.Vector3(x, 0.25, z), 'box', { width: c, height: 0.5, depth: c });
   }
@@ -560,9 +543,9 @@ export class CityScene {
     const a = this.AVENUE_HALF + 0.8;
     const c = this.CROSS_HALF + 0.8;
     const spots = [
-      [-a, -c], [a, -c], [-a, c], [a, c],          // intersection corners
-      [a, -this.Q], [-a, this.Q],                   // along the avenue
-      [-this.Q, c], [this.Q, -c],                   // along the cross street
+      [-a, -c], [a, -c], [-a, c], [a, c],
+      [a, -this.Q], [-a, this.Q],
+      [-this.Q, c], [this.Q, -c],
       [a, this.HALF - 3], [-a, -this.HALF + 3],
     ];
     for (const [x, z] of spots) this.createStreetLamp(x, z);
@@ -599,16 +582,13 @@ export class CityScene {
     const along = [-this.Q - 4, -this.Q + 4, this.Q - 4, this.Q + 4];
 
     for (const t of along) {
-      // North & south rows (skip the vertical-avenue gap near x = 0).
       this.createBuilding(t, -edge, 7, 4, 11 + Math.random() * 4);
       this.createBuilding(t, edge, 7, 4, 11 + Math.random() * 4);
-      // East & west rows (skip the cross-avenue gap near z = 0).
       this.createBuilding(-edge, t, 4, 7, 12 + Math.random() * 4);
       this.createBuilding(edge, t, 4, 7, 12 + Math.random() * 4);
     }
   }
 
-  // ------------------------------------------------------------- materials
 
   private buildFacadeMaterials(): void {
     const palettes: Array<[number, number]> = [

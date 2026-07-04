@@ -64,7 +64,6 @@ export class EnemyController {
 
     this.updateAIState(deltaTime);
 
-    // While caught, let the one-shot lunge/bite play instead of locomotion.
     if (this.currentState !== EnemyState.CAUGHT) {
       const speed = this.velocity.length();
       const isChasing = this.currentState === EnemyState.CHASE;
@@ -147,7 +146,6 @@ export class EnemyController {
   private updateAlert(distanceToTarget: number, deltaTime: number): void {
     this.stop(deltaTime);
 
-    // Lost sight before committing — give up and wander again.
     if (distanceToTarget > ENEMY.DETECTION_RADIUS * 1.4) {
       this.setState(EnemyState.PATROL);
       this.pickPatrolTarget();
@@ -172,12 +170,11 @@ export class EnemyController {
 
     if (distanceToTarget <= this.catchRadius) {
       this.setState(EnemyState.CAUGHT);
-      this.animationStateMachine.playAction('attack'); // lunge/bite on the catch
+      this.animationStateMachine.playAction('attack');
       this.stop(deltaTime);
       return;
     }
 
-    // Track how long the player has stayed out of reach; eventually give up.
     if (distanceToTarget > ENEMY.LOSE_INTEREST_RADIUS) {
       this.loseInterestTimer += deltaTime;
       if (this.loseInterestTimer >= ENEMY.LOSE_INTEREST_TIME) {

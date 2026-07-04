@@ -1,9 +1,3 @@
-// NOTE: This file used to hold the combat system (Health/Attack/damage).
-// The game pivoted to a pure survive/evade chase, so combat was stripped.
-// The depletable-resource component pattern is repurposed here as the
-// player's sprint stamina. The folder name is kept for now to limit churn;
-// it can be renamed (e.g. to `components/`) in a later pass.
-
 /**
  * Drives the player's sprint stamina: drains while sprinting, regenerates
  * after a short delay when not. Once fully drained the player becomes

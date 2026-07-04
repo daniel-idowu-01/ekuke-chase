@@ -125,8 +125,6 @@ export class CameraController {
     const followPos = playerPos || this.targetPlayer!.position;
 
     if (followHeading !== undefined) {
-      // Auto-follow (touch): swing the camera to sit behind the player's
-      // heading (yaw = heading + PI) using a shortest-arc lerp.
       const targetYaw = followHeading + Math.PI;
       let diff = ((targetYaw - this.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
       if (diff < -Math.PI) diff += Math.PI * 2;
