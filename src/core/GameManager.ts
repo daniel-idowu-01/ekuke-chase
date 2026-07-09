@@ -9,7 +9,7 @@ import { TouchControls } from '../systems/TouchControls';
 import { AnimationManager } from '../animation/AnimationManager';
 import { CityScene } from '../scenes/CityScene';
 import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
-import { GAME, PHYSICS, PLAYER, ENEMY } from '../utils/Constants';
+import { GAME, PHYSICS, PLAYER, ENEMY, SCENE } from '../utils/Constants';
 
 const PLAYER_ANIM_MAP: Record<string, string> = {
   idle: 'Idle',
@@ -44,7 +44,15 @@ export class GameManager {
   private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
   private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
   private gameOver: boolean = false;
-  private survivalTimeRemaining: number = GAME.SURVIVAL_TIME;
+  private elapsedTime: number = 0;
+  private nextDogSpawnTime: number = GAME.EXTRA_DOG_INTERVAL;
+  private spawningDog: boolean = false;
+
+  // Close-call feedback state.
+  private nearMissArmed: boolean = false;
+  private nearMissCooldown: number = 0;
+  private slowMoTimer: number = 0;
+  private timeScale: number = 1;
 
   private lastFrameTime: number = 0;
   private fixedTimestep: number = PHYSICS.FIXED_TIMESTEP;
@@ -104,7 +112,7 @@ export class GameManager {
   private async beginGame(count: number): Promise<void> {
     this.dogCount = count;
     await this.createEnemies(count);
-    this.survivalTimeRemaining = GAME.SURVIVAL_TIME;
+    this.resetRunState();
     this.gameOver = false;
     this.start();
   }
@@ -228,8 +236,15 @@ export class GameManager {
     requestAnimationFrame(this.gameLoop);
 
     const currentTime = performance.now();
-    const deltaTime = Math.min((currentTime - this.lastFrameTime) / 1000, 0.016);
+    const realDelta = Math.min((currentTime - this.lastFrameTime) / 1000, 0.016);
     this.lastFrameTime = currentTime;
+
+    // Slow-mo: ease the time scale toward its target (0.4 during a near-miss)
+    // and feed the scaled dt into physics + gameplay for a juicy hitch.
+    this.slowMoTimer = Math.max(0, this.slowMoTimer - realDelta);
+    const targetScale = this.slowMoTimer > 0 ? 0.4 : 1;
+    this.timeScale += (targetScale - this.timeScale) * Math.min(1, realDelta * 12);
+    const deltaTime = realDelta * this.timeScale;
 
     this.physicsAccumulator += deltaTime;
     while (this.physicsAccumulator >= this.fixedTimestep) {
@@ -250,7 +265,8 @@ export class GameManager {
     if (!this.player) return;
     if (this.gameOver) return;
 
-    this.survivalTimeRemaining -= deltaTime;
+    this.elapsedTime += deltaTime;
+    this.updateDifficulty();
 
     const onTouch = this.touchControls.isActive();
     if (onTouch) {
@@ -264,11 +280,16 @@ export class GameManager {
 
     this.player.update(deltaTime);
 
+    const playerPos = this.player.getModel().position;
     let caught = false;
+    let nearest = Infinity;
     for (const enemy of this.enemies) {
       enemy.update(deltaTime);
       if (enemy.hasCaughtPlayer()) caught = true;
+      nearest = Math.min(nearest, playerPos.distanceTo(enemy.getWorldPosition()));
     }
+
+    this.updateDangerFeedback(nearest, deltaTime);
 
     const followHeading = (onTouch || this.autoSprint) ? this.player.getHeading() : undefined;
     this.cameraController.update(
@@ -280,30 +301,107 @@ export class GameManager {
     this.uiSystem.updateStamina(this.player.getStaminaRatio(), this.player.isExhausted());
 
     this.uiSystem.updateFPS(deltaTime);
-    this.uiSystem.updateSurvivalTimer(this.survivalTimeRemaining);
+    this.uiSystem.updateScore(this.elapsedTime);
 
-    if (this.survivalTimeRemaining <= 0) {
-      this.endGame(true);
-    } else if (caught) {
-      this.endGame(false);
+    if (caught) {
+      this.endGame();
     }
+  }
+
+  /** Ramp dog speed and periodically add a dog as the run goes on. */
+  private updateDifficulty(): void {
+    const rampT = Math.max(0, this.elapsedTime - GAME.ESCALATION_START);
+    const mult = Math.min(GAME.MAX_SPEED_MULT, 1 + rampT * GAME.SPEED_RAMP_PER_SEC);
+    for (const enemy of this.enemies) enemy.setSpeedMultiplier(mult);
+
+    if (
+      this.elapsedTime >= this.nextDogSpawnTime &&
+      this.enemies.length < GAME.MAX_DOGS &&
+      !this.spawningDog
+    ) {
+      this.nextDogSpawnTime += GAME.EXTRA_DOG_INTERVAL;
+      void this.spawnExtraDog(mult);
+    }
+  }
+
+  /**
+   * Danger vignette scales with the nearest dog's proximity; a near-miss
+   * (a dog got very close then the player escaped) fires shake + slow-mo +
+   * a flash.
+   */
+  private updateDangerFeedback(nearest: number, deltaTime: number): void {
+    const near = 1.2;
+    const far = GAME.NEAR_MISS_DISTANCE + 2.2;
+    const level = THREE.MathUtils.clamp((far - nearest) / (far - near), 0, 1);
+    this.uiSystem.setDangerLevel(level);
+
+    // Sustained low rumble that grows as a dog closes in.
+    if (level > 0.35) this.cameraController.shake(0.05 + level * 0.12);
+
+    this.nearMissCooldown = Math.max(0, this.nearMissCooldown - deltaTime);
+    if (nearest < GAME.NEAR_MISS_DISTANCE) {
+      this.nearMissArmed = true;
+    } else if (
+      this.nearMissArmed &&
+      nearest > GAME.NEAR_MISS_DISTANCE + 0.8 &&
+      this.nearMissCooldown <= 0
+    ) {
+      this.nearMissArmed = false;
+      this.nearMissCooldown = 1.5;
+      this.cameraController.shake(0.35);
+      this.uiSystem.flashDanger();
+      this.slowMoTimer = 0.16;
+    }
+  }
+
+  private async spawnExtraDog(speedMultiplier: number): Promise<void> {
+    this.spawningDog = true;
+    // Spawn at the arena corner farthest from the player so it doesn't pop in
+    // on top of them.
+    const p = this.player!.getModel().position;
+    const edge = SCENE.ARENA_SIZE / 2 - 3;
+    let best = { x: -edge, z: -edge };
+    let bestDist = -1;
+    for (const x of [-edge, edge]) {
+      for (const z of [-edge, edge]) {
+        const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+        if (d > bestDist) {
+          bestDist = d;
+          best = { x, z };
+        }
+      }
+    }
+    const enemy = await this.createOneEnemy(best.x, best.z);
+    enemy.setTarget(this.player);
+    enemy.setSpeedMultiplier(speedMultiplier);
+    if (!this.gameOver) this.enemies.push(enemy);
+    this.spawningDog = false;
   }
 
   private render(): void {
     this.renderer.render();
   }
 
-  private endGame(playerWon: boolean): void {
+  private endGame(): void {
     this.gameOver = true;
+    this.uiSystem.setDangerLevel(0);
+    this.slowMoTimer = 0;
+    this.timeScale = 1;
 
-    const survived = Math.min(
-      GAME.SURVIVAL_TIME,
-      Math.max(0, GAME.SURVIVAL_TIME - this.survivalTimeRemaining)
-    );
-
-    this.uiSystem.showGameOver(playerWon, survived, () => {
+    this.uiSystem.showGameOver(this.elapsedTime, () => {
       void this.restart();
     });
+  }
+
+  private resetRunState(): void {
+    this.elapsedTime = 0;
+    this.nextDogSpawnTime = GAME.EXTRA_DOG_INTERVAL;
+    this.spawningDog = false;
+    this.nearMissArmed = false;
+    this.nearMissCooldown = 0;
+    this.slowMoTimer = 0;
+    this.timeScale = 1;
+    this.uiSystem.setDangerLevel(0);
   }
 
   private async restart(): Promise<void> {
@@ -321,7 +419,7 @@ export class GameManager {
     this.enemies = [];
 
     this.gameOver = false;
-    this.survivalTimeRemaining = GAME.SURVIVAL_TIME;
+    this.resetRunState();
 
     await this.createPlayer();
     await this.createEnemies(this.dogCount);

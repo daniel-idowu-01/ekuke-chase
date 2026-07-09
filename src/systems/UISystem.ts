@@ -6,6 +6,8 @@ export class UISystem {
   private staminaBar: HTMLElement;
   private staminaText: HTMLElement;
   private autoSprintChip: HTMLElement;
+  private dangerVignette: HTMLElement;
+  private dangerFlash: HTMLElement;
   private timerText: HTMLElement;
   private objectiveText: HTMLElement;
   private fpsCounter: HTMLElement;
@@ -66,9 +68,11 @@ export class UISystem {
     this.timerText.style.left = '50%';
     this.timerText.style.transform = 'translateX(-50%)';
     this.timerText.style.color = '#ffffff';
-    this.timerText.style.fontSize = '28px';
+    this.timerText.style.fontSize = '34px';
     this.timerText.style.fontWeight = 'bold';
-    this.timerText.textContent = '60';
+    this.timerText.style.fontFamily = "'Consolas', 'Courier New', monospace";
+    this.timerText.style.textShadow = '0 2px 8px rgba(0,0,0,0.5)';
+    this.timerText.textContent = '0.0s';
     this.container.appendChild(this.timerText);
 
     this.objectiveText = document.createElement('div');
@@ -78,8 +82,19 @@ export class UISystem {
     this.objectiveText.style.transform = 'translateX(-50%)';
     this.objectiveText.style.color = '#ffffff';
     this.objectiveText.style.fontSize = `${UI.FONT_SIZE}px`;
-    this.objectiveText.textContent = 'Survive until the timer reaches zero';
+    this.objectiveText.style.opacity = '0.75';
+    this.objectiveText.textContent = 'Run! Survive as long as you can';
     this.container.appendChild(this.objectiveText);
+
+    // Danger feedback: a red edge-vignette that intensifies with proximity,
+    // plus a brief flash on a near-miss.
+    this.dangerVignette = document.createElement('div');
+    this.dangerVignette.className = 'danger-vignette';
+    this.container.appendChild(this.dangerVignette);
+
+    this.dangerFlash = document.createElement('div');
+    this.dangerFlash.className = 'danger-flash';
+    this.container.appendChild(this.dangerFlash);
 
     this.fpsCounter = document.createElement('div');
     this.fpsCounter.style.position = 'absolute';
@@ -238,11 +253,26 @@ export class UISystem {
     }
   }
 
-  updateSurvivalTimer(timeRemaining: number): void {
-    this.timerText.textContent = `${Math.ceil(Math.max(0, timeRemaining))}`;
+  updateScore(elapsedSeconds: number): void {
+    this.timerText.textContent = `${Math.max(0, elapsedSeconds).toFixed(1)}s`;
   }
 
-  showGameOver(playerWon: boolean, survivedSeconds: number, onRestart: () => void): void {
+  /** Proximity danger, 0 (safe) → 1 (about to be caught). Drives the vignette. */
+  setDangerLevel(level: number): void {
+    const clamped = Math.max(0, Math.min(1, level));
+    this.dangerVignette.style.opacity = (clamped * 0.6).toFixed(3);
+    this.dangerVignette.classList.toggle('pulse', clamped > 0.5);
+  }
+
+  /** Brief red flash when the player escapes a near-miss. */
+  flashDanger(): void {
+    this.dangerFlash.classList.remove('on');
+    // Force reflow so re-adding the class restarts the animation.
+    void this.dangerFlash.offsetWidth;
+    this.dangerFlash.classList.add('on');
+  }
+
+  showGameOver(survivedSeconds: number, onRestart: () => void): void {
     const best = this.getBestTime();
     const isRecord = survivedSeconds > best + 0.05;
     if (isRecord) {
@@ -250,13 +280,13 @@ export class UISystem {
     }
     const bestToShow = Math.max(best, survivedSeconds);
 
-    this.goCard.classList.toggle('win', playerWon);
-    this.goCard.classList.toggle('lose', !playerWon);
-    this.goIcon.textContent = playerWon ? '🏆' : '🐾';
-    this.goTitle.textContent = playerWon ? 'You Survived!' : 'Caught!';
-    this.goSub.textContent = playerWon
-      ? 'You outran the dog for the full minute.'
-      : 'The dog ran you down. Keep moving next time.';
+    this.goCard.classList.remove('win');
+    this.goCard.classList.add('lose');
+    this.goIcon.textContent = '🐾';
+    this.goTitle.textContent = 'Caught!';
+    this.goSub.textContent = isRecord
+      ? 'New personal best — outstanding run!'
+      : 'The pack got you. Go again and beat your time.';
     this.goTimeValue.textContent = this.formatTime(survivedSeconds);
     this.goBestValue.textContent = this.formatTime(bestToShow);
     this.goRecord.style.display = isRecord ? 'block' : 'none';
@@ -318,7 +348,7 @@ export class UISystem {
 
     const hint = document.createElement('div');
     hint.className = 'go-hint';
-    hint.textContent = 'Survive 60 seconds. Press 1 – 3';
+    hint.textContent = 'Survive as long as you can · Press 1 – 3';
 
     card.appendChild(icon);
     card.appendChild(title);
@@ -476,6 +506,20 @@ export class UISystem {
         color: #06210f; background: linear-gradient(90deg, #6ff0a6, #36d07b);
         border-color: rgba(54,208,123,0.8);
       }
+
+      .danger-vignette {
+        position: fixed; inset: 0; pointer-events: none; z-index: 90; opacity: 0;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(210,20,20,0.85) 100%);
+        transition: opacity 0.1s linear;
+      }
+      .danger-vignette.pulse { animation: danger-pulse 0.6s ease-in-out infinite; }
+      @keyframes danger-pulse { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.6); } }
+      .danger-flash {
+        position: fixed; inset: 0; pointer-events: none; z-index: 91; opacity: 0;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(255,70,70,0.95) 100%);
+      }
+      .danger-flash.on { animation: danger-flash-anim 0.4s ease-out; }
+      @keyframes danger-flash-anim { 0% { opacity: 0.9; } 100% { opacity: 0; } }
     `;
     document.head.appendChild(style);
   }

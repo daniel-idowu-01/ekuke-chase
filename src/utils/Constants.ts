@@ -49,8 +49,15 @@ export const ENEMY = {
   PATROL_REPICK_TIME: 6,
 };
 
+// Endless survival: the run only ends when a dog catches you; score = seconds
+// survived. Difficulty ramps over time so no two runs feel the same.
 export const GAME = {
-  SURVIVAL_TIME: 60,
+  ESCALATION_START: 8,        // seconds before the difficulty ramp begins
+  SPEED_RAMP_PER_SEC: 0.012,  // dog chase-speed multiplier gained per second
+  MAX_SPEED_MULT: 1.5,        // cap so dogs never become uncatchable-fast
+  EXTRA_DOG_INTERVAL: 18,     // spawn one more dog every N seconds...
+  MAX_DOGS: 5,                // ...up to this many total
+  NEAR_MISS_DISTANCE: 2.2,    // dog within this then escaping = a "near miss"
 };
 
 export const PHYSICS = {

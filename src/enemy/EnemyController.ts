@@ -30,6 +30,7 @@ export class EnemyController {
 
   private isGrounded: boolean = false;
   private catchRadius: number = ENEMY.CATCH_RADIUS;
+  private speedMultiplier: number = 1;
   private stateTimer: number = 0;
   private patrolTimer: number = 0;
   private loseInterestTimer: number = 0;
@@ -189,7 +190,7 @@ export class EnemyController {
 
     const dir = this.directionToTarget();
     this.faceTowards(dir, deltaTime);
-    this.desiredVelocity.copy(dir).multiplyScalar(ENEMY.SPEED);
+    this.desiredVelocity.copy(dir).multiplyScalar(ENEMY.SPEED * this.speedMultiplier);
     this.applyHorizontalVelocity(this.desiredVelocity, deltaTime, ENEMY.ACCELERATION);
   }
 
@@ -243,6 +244,10 @@ export class EnemyController {
       this.bodyHandle,
       new THREE.Vector3(horizontalVelocity.x, currentVelocity.y, horizontalVelocity.z)
     );
+  }
+
+  setSpeedMultiplier(multiplier: number): void {
+    this.speedMultiplier = multiplier;
   }
 
   hasCaughtPlayer(): boolean {
