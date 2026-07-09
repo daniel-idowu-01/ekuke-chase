@@ -56,10 +56,10 @@ export class Renderer {
     this.directionalLight.shadow.mapSize.width = SCENE.SHADOW_MAP_SIZE;
     this.directionalLight.shadow.mapSize.height = SCENE.SHADOW_MAP_SIZE;
     this.directionalLight.shadow.camera.far = SCENE.SHADOW_CAMERA_FAR;
-    this.directionalLight.shadow.camera.left = -30;
-    this.directionalLight.shadow.camera.right = 30;
-    this.directionalLight.shadow.camera.top = 30;
-    this.directionalLight.shadow.camera.bottom = -30;
+    this.directionalLight.shadow.camera.left = -40;
+    this.directionalLight.shadow.camera.right = 40;
+    this.directionalLight.shadow.camera.top = 40;
+    this.directionalLight.shadow.camera.bottom = -40;
     this.directionalLight.shadow.bias = -0.0001;
     this.scene.add(this.directionalLight);
 

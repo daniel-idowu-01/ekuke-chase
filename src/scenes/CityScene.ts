@@ -24,9 +24,9 @@ export class CityScene {
   private physicsWorld: PhysicsWorld;
 
   private readonly HALF = SCENE.ARENA_SIZE / 2;
-  private readonly AVENUE_HALF = 4.5;
-  private readonly CROSS_HALF = 4.5;
-  private readonly Q = (4.5 + SCENE.ARENA_SIZE / 2) / 2;
+  private readonly AVENUE_HALF = 5.5;
+  private readonly CROSS_HALF = 5.5;
+  private readonly Q = (5.5 + SCENE.ARENA_SIZE / 2) / 2;
 
   private materials = {
     asphalt: new THREE.MeshStandardMaterial({ color: 0x44474f, roughness: 0.95 }),
@@ -71,6 +71,7 @@ export class CityScene {
     this.createAlleyBlock(this.Q, -this.Q);
     this.createMarketBlock(-this.Q, this.Q);
     this.createParkingBlock(this.Q, this.Q);
+    this.createOutskirts();
     this.createPerimeter();
     this.createStreetLamps();
   }
@@ -542,13 +543,61 @@ export class CityScene {
   private createStreetLamps(): void {
     const a = this.AVENUE_HALF + 0.8;
     const c = this.CROSS_HALF + 0.8;
-    const spots = [
-      [-a, -c], [a, -c], [-a, c], [a, c],
-      [a, -this.Q], [-a, this.Q],
-      [-this.Q, c], [this.Q, -c],
-      [a, this.HALF - 3], [-a, -this.HALF + 3],
-    ];
-    for (const [x, z] of spots) this.createStreetLamp(x, z);
+
+    // Intersection corners.
+    for (const [x, z] of [[-a, -c], [a, -c], [-a, c], [a, c]]) {
+      this.createStreetLamp(x, z);
+    }
+
+    // Lamps marching down both avenues (skip the intersection).
+    for (let z = -this.HALF + 6; z <= this.HALF - 6; z += 11) {
+      if (Math.abs(z) < this.CROSS_HALF + 3) continue;
+      this.createStreetLamp(a, z);
+      this.createStreetLamp(-a, z);
+    }
+    for (let x = -this.HALF + 6; x <= this.HALF - 6; x += 11) {
+      if (Math.abs(x) < this.AVENUE_HALF + 3) continue;
+      this.createStreetLamp(x, c);
+      this.createStreetLamp(x, -c);
+    }
+  }
+
+  /**
+   * Fill the open ground between the block cores and the rim with scattered
+   * trees, planters and the odd prop cluster — texture + light cover without
+   * walling off the streets (which stay clear as running lanes).
+   */
+  private createOutskirts(): void {
+    const step = 7;
+    const min = -this.HALF + 6;
+    const max = this.HALF - 6;
+
+    for (let x = min; x <= max; x += step) {
+      for (let z = min; z <= max; z += step) {
+        if (this.isOnStreet(x, z) || this.isNearBlockCore(x, z)) continue;
+
+        const jx = x + (Math.random() - 0.5) * 2.5;
+        const jz = z + (Math.random() - 0.5) * 2.5;
+        const roll = Math.random();
+        if (roll < 0.45) this.createTree(jx, jz);
+        else if (roll < 0.62) this.createPlanter(jx, jz);
+        else if (roll < 0.70) this.createCrateStack(jx, jz);
+        // else: leave it open
+      }
+    }
+  }
+
+  private isOnStreet(x: number, z: number): boolean {
+    return Math.abs(x) < this.AVENUE_HALF + 2.5 || Math.abs(z) < this.CROSS_HALF + 2.5;
+  }
+
+  private isNearBlockCore(x: number, z: number): boolean {
+    for (const cx of [-this.Q, this.Q]) {
+      for (const cz of [-this.Q, this.Q]) {
+        if (Math.hypot(x - cx, z - cz) < 9.5) return true;
+      }
+    }
+    return false;
   }
 
   private createStreetLamp(x: number, z: number): void {
@@ -579,9 +628,10 @@ export class CityScene {
    */
   private createPerimeter(): void {
     const edge = this.HALF + 1.5;
-    const along = [-this.Q - 4, -this.Q + 4, this.Q - 4, this.Q + 4];
+    const gap = this.AVENUE_HALF + 2.5; // leave the avenue exits open
 
-    for (const t of along) {
+    for (let t = -this.HALF + 4; t <= this.HALF - 4; t += 8) {
+      if (Math.abs(t) < gap) continue;
       this.createBuilding(t, -edge, 7, 4, 11 + Math.random() * 4);
       this.createBuilding(t, edge, 7, 4, 11 + Math.random() * 4);
       this.createBuilding(-edge, t, 4, 7, 12 + Math.random() * 4);

@@ -6,6 +6,9 @@ import { EnemyController } from '../enemy/EnemyController';
 import { CameraController } from '../systems/CameraController';
 import { UISystem } from '../systems/UISystem';
 import { TouchControls } from '../systems/TouchControls';
+import { CoinField } from '../systems/CoinField';
+import { Progression } from '../utils/Progression';
+import { PLAYER_SKINS, getSkin, applySkin } from '../utils/Skins';
 import { AnimationManager } from '../animation/AnimationManager';
 import { CityScene } from '../scenes/CityScene';
 import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
@@ -40,6 +43,8 @@ export class GameManager {
   private cameraController: CameraController;
   private uiSystem: UISystem;
   private touchControls: TouchControls;
+  private coinField: CoinField;
+  private coinsThisRun: number = 0;
   private cityScene: CityScene;
   private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
   private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
@@ -64,6 +69,7 @@ export class GameManager {
     this.cameraController = new CameraController(this.renderer.getCamera(), this.physicsWorld);
     this.uiSystem = new UISystem();
     this.touchControls = new TouchControls();
+    this.coinField = new CoinField(this.renderer);
     this.cityScene = new CityScene(this.renderer, this.physicsWorld);
 
     try {
@@ -90,18 +96,22 @@ export class GameManager {
 
     await Promise.all([this.playerModel.preload(), this.enemyModel.preload()]);
 
-    await this.createPlayer();
-
-    this.cameraController.setTarget(this.player!.getModel());
-
     this.uiSystem.bindAutoSprint(() => this.setAutoSprint(!this.autoSprint));
     this.uiSystem.setAutoSprintDisplay(this.autoSprint);
     window.addEventListener('keydown', (e) => {
       if (e.key.toLowerCase() === 't') this.setAutoSprint(!this.autoSprint);
     });
 
-    this.cameraController.update(this.player!.getModel().position, 0);
+    // Static overview shot of the city behind the start menu.
+    const cam = this.renderer.getCamera();
+    cam.position.set(14, 11, 24);
+    cam.lookAt(0, 1.5, 0);
     this.renderer.render();
+
+    // Coins + skin shop live on the start menu. The player/dogs are built when
+    // the run begins, so the chosen skin always applies.
+    this.uiSystem.updateCoins(Progression.getCoins(), 0);
+    this.refreshShop();
 
     console.log('Game initialized!');
     this.uiSystem.showStartMenu((count) => {
@@ -111,10 +121,37 @@ export class GameManager {
 
   private async beginGame(count: number): Promise<void> {
     this.dogCount = count;
+    await this.createPlayer();
+    this.cameraController.setTarget(this.player!.getModel());
     await this.createEnemies(count);
     this.resetRunState();
     this.gameOver = false;
     this.start();
+  }
+
+  private refreshShop(): void {
+    this.uiSystem.renderShop(
+      PLAYER_SKINS,
+      Progression.getOwnedSkins(),
+      Progression.getSelectedSkin(),
+      Progression.getCoins(),
+      (id) => this.pickSkin(id)
+    );
+  }
+
+  private pickSkin(id: string): void {
+    const skin = getSkin(id);
+    if (Progression.ownsSkin(id)) {
+      Progression.setSelectedSkin(id);
+    } else if (Progression.getCoins() >= skin.cost) {
+      Progression.addCoins(-skin.cost);
+      Progression.ownSkin(id);
+      Progression.setSelectedSkin(id);
+    } else {
+      return; // can't afford; leave it locked
+    }
+    this.uiSystem.updateCoins(Progression.getCoins(), this.coinsThisRun);
+    this.refreshShop();
   }
 
   private async createPlayer(): Promise<void> {
@@ -126,6 +163,9 @@ export class GameManager {
         child.receiveShadow = true;
       }
     });
+
+    // Apply the selected skin (repaints the robot; default leaves it as-is).
+    applySkin(character, getSkin(Progression.getSelectedSkin()).color);
 
     // Fit the model to the physics capsule: total capsule height, feet resting
     // at the capsule's bottom relative to the (centre-aligned) body origin.
@@ -291,6 +331,13 @@ export class GameManager {
 
     this.updateDangerFeedback(nearest, deltaTime);
 
+    const gained = this.coinField.update(deltaTime, playerPos);
+    if (gained > 0) {
+      this.coinsThisRun += gained;
+      Progression.addCoins(gained);
+      this.uiSystem.updateCoins(Progression.getCoins(), this.coinsThisRun);
+    }
+
     const followHeading = (onTouch || this.autoSprint) ? this.player.getHeading() : undefined;
     this.cameraController.update(
       this.player.getModel().position,
@@ -388,7 +435,7 @@ export class GameManager {
     this.slowMoTimer = 0;
     this.timeScale = 1;
 
-    this.uiSystem.showGameOver(this.elapsedTime, () => {
+    this.uiSystem.showGameOver(this.elapsedTime, this.coinsThisRun, () => {
       void this.restart();
     });
   }
@@ -401,7 +448,10 @@ export class GameManager {
     this.nearMissCooldown = 0;
     this.slowMoTimer = 0;
     this.timeScale = 1;
+    this.coinsThisRun = 0;
+    this.coinField.spawn(GAME.COIN_COUNT);
     this.uiSystem.setDangerLevel(0);
+    this.uiSystem.updateCoins(Progression.getCoins(), 0);
   }
 
   private async restart(): Promise<void> {

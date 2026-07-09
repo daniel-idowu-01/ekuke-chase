@@ -1,4 +1,5 @@
 import { UI } from '../utils/Constants';
+import type { Skin } from '../utils/Skins';
 
 
 export class UISystem {
@@ -6,6 +7,7 @@ export class UISystem {
   private staminaBar: HTMLElement;
   private staminaText: HTMLElement;
   private autoSprintChip: HTMLElement;
+  private coinCounter: HTMLElement;
   private dangerVignette: HTMLElement;
   private dangerFlash: HTMLElement;
   private timerText: HTMLElement;
@@ -18,10 +20,13 @@ export class UISystem {
   private goSub!: HTMLElement;
   private goTimeValue!: HTMLElement;
   private goBestValue!: HTMLElement;
+  private goCoins!: HTMLElement;
   private goRecord!: HTMLElement;
   private goButton!: HTMLButtonElement;
   private startScreen!: HTMLElement;
   private startBest!: HTMLElement;
+  private startCoins!: HTMLElement;
+  private shopRow!: HTMLElement;
   private startButtons: Array<{ el: HTMLButtonElement; count: number }> = [];
   private fpsFrameCount: number = 0;
   private fpsDeltaTime: number = 0;
@@ -95,6 +100,14 @@ export class UISystem {
     this.dangerFlash = document.createElement('div');
     this.dangerFlash.className = 'danger-flash';
     this.container.appendChild(this.dangerFlash);
+
+    this.coinCounter = document.createElement('div');
+    this.coinCounter.className = 'coin-counter';
+    this.coinCounter.style.position = 'absolute';
+    this.coinCounter.style.top = `${UI.PADDING}px`;
+    this.coinCounter.style.right = `${UI.PADDING}px`;
+    this.coinCounter.textContent = '🪙 0';
+    this.container.appendChild(this.coinCounter);
 
     this.fpsCounter = document.createElement('div');
     this.fpsCounter.style.position = 'absolute';
@@ -184,6 +197,9 @@ export class UISystem {
     stats.appendChild(timeStat);
     stats.appendChild(bestStat);
 
+    const coins = document.createElement('div');
+    coins.className = 'go-coins';
+
     const record = document.createElement('div');
     record.className = 'go-record';
     record.textContent = '★ New best time!';
@@ -200,6 +216,7 @@ export class UISystem {
     card.appendChild(title);
     card.appendChild(sub);
     card.appendChild(stats);
+    card.appendChild(coins);
     card.appendChild(record);
     card.appendChild(button);
     card.appendChild(hint);
@@ -212,6 +229,7 @@ export class UISystem {
     this.goSub = sub;
     this.goTimeValue = timeValue;
     this.goBestValue = bestValue;
+    this.goCoins = coins;
     this.goRecord = record;
     this.goButton = button;
 
@@ -239,6 +257,10 @@ export class UISystem {
   setAutoSprintDisplay(enabled: boolean): void {
     this.autoSprintChip.textContent = `🏃 Auto-Run: ${enabled ? 'ON' : 'OFF'}  (T)`;
     this.autoSprintChip.classList.toggle('on', enabled);
+  }
+
+  updateCoins(total: number, run: number): void {
+    this.coinCounter.textContent = run > 0 ? `🪙 ${total}  (+${run})` : `🪙 ${total}`;
   }
 
   updateFPS(deltaTime: number): void {
@@ -272,7 +294,7 @@ export class UISystem {
     this.dangerFlash.classList.add('on');
   }
 
-  showGameOver(survivedSeconds: number, onRestart: () => void): void {
+  showGameOver(survivedSeconds: number, coinsThisRun: number, onRestart: () => void): void {
     const best = this.getBestTime();
     const isRecord = survivedSeconds > best + 0.05;
     if (isRecord) {
@@ -289,6 +311,8 @@ export class UISystem {
       : 'The pack got you. Go again and beat your time.';
     this.goTimeValue.textContent = this.formatTime(survivedSeconds);
     this.goBestValue.textContent = this.formatTime(bestToShow);
+    this.goCoins.textContent = coinsThisRun > 0 ? `🪙 +${coinsThisRun} coins collected` : '';
+    this.goCoins.style.display = coinsThisRun > 0 ? 'block' : 'none';
     this.goRecord.style.display = isRecord ? 'block' : 'none';
 
     this.gameOverScreen.classList.add('visible');
@@ -346,6 +370,21 @@ export class UISystem {
     best.className = 'go-hint';
     this.startBest = best;
 
+    // Skin shop: coin balance + a row of colour swatches.
+    const shopHeader = document.createElement('div');
+    shopHeader.className = 'shop-header';
+    const shopLabel = document.createElement('span');
+    shopLabel.textContent = 'Skins';
+    const coinsLabel = document.createElement('span');
+    coinsLabel.className = 'shop-coins';
+    this.startCoins = coinsLabel;
+    shopHeader.appendChild(shopLabel);
+    shopHeader.appendChild(coinsLabel);
+
+    const shopRow = document.createElement('div');
+    shopRow.className = 'shop-row';
+    this.shopRow = shopRow;
+
     const hint = document.createElement('div');
     hint.className = 'go-hint';
     hint.textContent = 'Survive as long as you can · Press 1 – 3';
@@ -355,10 +394,51 @@ export class UISystem {
     card.appendChild(sub);
     card.appendChild(choices);
     card.appendChild(best);
+    card.appendChild(shopHeader);
+    card.appendChild(shopRow);
     card.appendChild(hint);
     screen.appendChild(card);
     this.container.appendChild(screen);
     return screen;
+  }
+
+  /** Render/refresh the skin shop swatches on the start menu. */
+  renderShop(
+    skins: Skin[],
+    ownedIds: string[],
+    selectedId: string,
+    coins: number,
+    onPick: (id: string) => void
+  ): void {
+    this.startCoins.textContent = `🪙 ${coins}`;
+    this.shopRow.replaceChildren();
+
+    for (const skin of skins) {
+      const owned = ownedIds.includes(skin.id);
+      const selected = skin.id === selectedId;
+
+      const swatch = document.createElement('button');
+      swatch.className = 'shop-swatch';
+      if (selected) swatch.classList.add('selected');
+      if (!owned) swatch.classList.add('locked');
+
+      const dot = document.createElement('span');
+      dot.className = 'shop-dot';
+      dot.style.background = skin.color === null
+        ? 'conic-gradient(#c9ccd2, #7f8794, #c9ccd2)'
+        : `#${skin.color.toString(16).padStart(6, '0')}`;
+      swatch.appendChild(dot);
+
+      const tag = document.createElement('span');
+      tag.className = 'shop-tag';
+      tag.textContent = owned ? (selected ? '✓' : skin.name) : `🪙${skin.cost}`;
+      if (!owned && coins < skin.cost) swatch.classList.add('unaffordable');
+      swatch.appendChild(tag);
+
+      swatch.title = owned ? skin.name : `${skin.name} — ${skin.cost} coins`;
+      swatch.onclick = () => onPick(skin.id);
+      this.shopRow.appendChild(swatch);
+    }
   }
 
   showStartMenu(onStart: (count: number) => void): void {
@@ -495,6 +575,35 @@ export class UISystem {
       .sm-btn:active { transform: translateY(0); }
       .sm-num { font-size: 30px; font-weight: 800; line-height: 1; }
       .sm-cap { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #aeb6c4; }
+
+      .coin-counter {
+        font-family: 'Consolas', 'Courier New', monospace; font-size: 20px; font-weight: 700;
+        color: #ffd34e; text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      }
+      .go-coins { margin: -6px 0 10px; font-size: 15px; font-weight: 700; color: #ffd34e; }
+
+      .shop-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin: 16px 0 8px; font-size: 12px; text-transform: uppercase;
+        letter-spacing: 1.4px; color: #8a93a6;
+      }
+      .shop-coins { color: #ffd34e; font-weight: 700; font-family: 'Consolas', monospace; }
+      .shop-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+      .shop-swatch {
+        flex: 1 1 0; min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+        padding: 8px 4px; cursor: pointer; border-radius: 12px;
+        background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.10);
+        transition: transform 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+      }
+      .shop-swatch:hover { transform: translateY(-2px); background: rgba(255,255,255,0.08); }
+      .shop-swatch.selected { border-color: #ffd34e; background: rgba(255,211,78,0.12); }
+      .shop-swatch.unaffordable { opacity: 0.5; }
+      .shop-dot {
+        width: 26px; height: 26px; border-radius: 50%;
+        border: 2px solid rgba(255,255,255,0.35); box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      }
+      .shop-tag { font-size: 11px; font-weight: 700; color: #cdd3dd; white-space: nowrap; }
+      .shop-swatch.selected .shop-tag { color: #ffd34e; }
 
       .auto-sprint-chip {
         font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; font-weight: 700;
