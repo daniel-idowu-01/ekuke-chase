@@ -45,6 +45,7 @@ export class GameManager {
   private touchControls: TouchControls;
   private coinField: CoinField;
   private coinsThisRun: number = 0;
+  private loopStarted: boolean = false;
   private cityScene: CityScene;
   private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
   private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
@@ -102,21 +103,10 @@ export class GameManager {
       if (e.key.toLowerCase() === 't') this.setAutoSprint(!this.autoSprint);
     });
 
-    // Static overview shot of the city behind the start menu.
-    const cam = this.renderer.getCamera();
-    cam.position.set(14, 11, 24);
-    cam.lookAt(0, 1.5, 0);
-    this.renderer.render();
-
-    // Coins + skin shop live on the start menu. The player/dogs are built when
-    // the run begins, so the chosen skin always applies.
-    this.uiSystem.updateCoins(Progression.getCoins(), 0);
-    this.refreshShop();
-
+    // Player/dogs are built when a run begins (so the chosen skin applies);
+    // until then we show the menu over a static overview of the city.
     console.log('Game initialized!');
-    this.uiSystem.showStartMenu((count) => {
-      void this.beginGame(count);
-    });
+    this.showMenu();
   }
 
   private async beginGame(count: number): Promise<void> {
@@ -268,6 +258,10 @@ export class GameManager {
   }
 
   private start(): void {
+    // The render loop runs continuously (it also draws the menu backdrop);
+    // only kick it off once.
+    if (this.loopStarted) return;
+    this.loopStarted = true;
     this.lastFrameTime = performance.now();
     this.gameLoop();
   }
@@ -435,9 +429,12 @@ export class GameManager {
     this.slowMoTimer = 0;
     this.timeScale = 1;
 
-    this.uiSystem.showGameOver(this.elapsedTime, this.coinsThisRun, () => {
-      void this.restart();
-    });
+    this.uiSystem.showGameOver(
+      this.elapsedTime,
+      this.coinsThisRun,
+      () => { void this.restart(); },
+      () => { this.returnToMenu(); }
+    );
   }
 
   private resetRunState(): void {
@@ -454,19 +451,48 @@ export class GameManager {
     this.uiSystem.updateCoins(Progression.getCoins(), 0);
   }
 
-  private async restart(): Promise<void> {
-    console.log('Restarting game...');
-
+  /** Destroy the current player + dogs + coins (between runs / back to menu). */
+  private teardownRun(): void {
     if (this.player) {
       this.physicsWorld.destroyLinkedBody(this.player.getModel());
       this.renderer.remove(this.player.getModel());
       this.player.cleanup();
+      this.player = null;
     }
     for (const enemy of this.enemies) {
       this.physicsWorld.destroyLinkedBody(enemy.getModel());
       this.renderer.remove(enemy.getModel());
     }
     this.enemies = [];
+    this.coinField.clear();
+  }
+
+  /** Show the start menu (backdrop + shop). Gameplay stays frozen until a run. */
+  private showMenu(): void {
+    this.gameOver = true;
+    this.uiSystem.hideGameOver();
+
+    const cam = this.renderer.getCamera();
+    cam.position.set(14, 11, 24);
+    cam.lookAt(0, 1.5, 0);
+    this.renderer.render();
+
+    this.uiSystem.updateCoins(Progression.getCoins(), 0);
+    this.refreshShop();
+    this.uiSystem.showStartMenu((count) => {
+      void this.beginGame(count);
+    });
+  }
+
+  private returnToMenu(): void {
+    this.teardownRun();
+    this.uiSystem.setDangerLevel(0);
+    this.showMenu();
+  }
+
+  private async restart(): Promise<void> {
+    console.log('Restarting game...');
+    this.teardownRun();
 
     this.gameOver = false;
     this.resetRunState();

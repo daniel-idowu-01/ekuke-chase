@@ -23,6 +23,7 @@ export class UISystem {
   private goCoins!: HTMLElement;
   private goRecord!: HTMLElement;
   private goButton!: HTMLButtonElement;
+  private goMenuButton!: HTMLButtonElement;
   private startScreen!: HTMLElement;
   private startBest!: HTMLElement;
   private startCoins!: HTMLElement;
@@ -208,9 +209,13 @@ export class UISystem {
     button.className = 'go-btn';
     button.textContent = 'Play again';
 
+    const menuButton = document.createElement('button');
+    menuButton.className = 'go-btn go-btn-secondary';
+    menuButton.textContent = 'Main Menu';
+
     const hint = document.createElement('div');
     hint.className = 'go-hint';
-    hint.textContent = 'Press Enter';
+    hint.textContent = 'Press Enter to play again';
 
     card.appendChild(icon);
     card.appendChild(title);
@@ -219,6 +224,7 @@ export class UISystem {
     card.appendChild(coins);
     card.appendChild(record);
     card.appendChild(button);
+    card.appendChild(menuButton);
     card.appendChild(hint);
     screen.appendChild(card);
     this.container.appendChild(screen);
@@ -232,6 +238,7 @@ export class UISystem {
     this.goCoins = coins;
     this.goRecord = record;
     this.goButton = button;
+    this.goMenuButton = menuButton;
 
     return screen;
   }
@@ -294,7 +301,12 @@ export class UISystem {
     this.dangerFlash.classList.add('on');
   }
 
-  showGameOver(survivedSeconds: number, coinsThisRun: number, onRestart: () => void): void {
+  showGameOver(
+    survivedSeconds: number,
+    coinsThisRun: number,
+    onRestart: () => void,
+    onMenu: () => void
+  ): void {
     const best = this.getBestTime();
     const isRecord = survivedSeconds > best + 0.05;
     if (isRecord) {
@@ -317,10 +329,16 @@ export class UISystem {
 
     this.gameOverScreen.classList.add('visible');
 
+    const cleanup = () => window.removeEventListener('keydown', onKey);
     const restart = () => {
-      window.removeEventListener('keydown', onKey);
+      cleanup();
       this.hideGameOver();
       onRestart();
+    };
+    const toMenu = () => {
+      cleanup();
+      this.hideGameOver();
+      onMenu();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
@@ -329,6 +347,7 @@ export class UISystem {
       }
     };
     this.goButton.onclick = restart;
+    this.goMenuButton.onclick = toMenu;
     window.addEventListener('keydown', onKey);
   }
 
@@ -559,6 +578,11 @@ export class UISystem {
       }
       .go-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
       .go-btn:active { transform: translateY(0); filter: brightness(0.95); }
+      .go-btn-secondary {
+        margin-top: 8px; color: #cdd3dd; background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.16); box-shadow: none;
+      }
+      .go-btn-secondary:hover { background: rgba(255,255,255,0.12); filter: none; }
       .go-hint { margin-top: 12px; font-size: 12px; color: #6c7589; }
 
       .sm-choices { display: flex; gap: 12px; margin: 6px 0 4px; }
