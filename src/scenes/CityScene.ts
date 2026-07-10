@@ -88,7 +88,13 @@ export class CityScene {
     base.position.set(0, -0.5, 0);
     base.receiveShadow = true;
     scene.add(base);
-    this.physicsWorld.createStaticBody(new THREE.Vector3(0, -0.5, 0), 'plane');
+    // Floor collider sized to the arena (top at y = 0) so it always covers the
+    // full play area regardless of ARENA_SIZE.
+    this.physicsWorld.createStaticBody(
+      new THREE.Vector3(0, -0.5, 0),
+      'box',
+      { width: size + 20, height: 1, depth: size + 20 }
+    );
 
     this.addFlat(this.materials.asphalt, 0, 0.02, 0, this.AVENUE_HALF * 2, size);
     this.addFlat(this.materials.asphalt, 0, 0.025, 0, size, this.CROSS_HALF * 2);

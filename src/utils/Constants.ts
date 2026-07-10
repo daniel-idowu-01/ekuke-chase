@@ -37,10 +37,10 @@ export const ENEMY = {
   ROTATION_SPEED: 7,
   MASS: 1,
   MODEL_HEIGHT: 0.85,
-  DETECTION_RADIUS: 17,
-  // Reachable lose-interest: break ~21 units away for 2.5s and the dog gives
+  DETECTION_RADIUS: 28,
+  // Reachable lose-interest: break ~34 units away for 2.5s and the dog gives
   // up and returns to patrol, granting a real breather in the larger map.
-  LOSE_INTEREST_RADIUS: 21,
+  LOSE_INTEREST_RADIUS: 34,
   CATCH_RADIUS: 0.9,
   IDLE_DURATION: 1.8,
   ALERT_DURATION: 0.65,
@@ -58,7 +58,7 @@ export const GAME = {
   EXTRA_DOG_INTERVAL: 18,     // spawn one more dog every N seconds...
   MAX_DOGS: 5,                // ...up to this many total
   NEAR_MISS_DISTANCE: 2.2,    // dog within this then escaping = a "near miss"
-  COIN_COUNT: 28,             // collectible coins kept live on the map
+  COIN_COUNT: 72,             // collectible coins kept live on the map
 };
 
 export const PHYSICS = {
@@ -93,12 +93,12 @@ export const ANIMATION = {
 };
 
 export const SCENE = {
-  ARENA_SIZE: 64,
+  ARENA_SIZE: 128,
   GROUND_HEIGHT: -0.5,
   LIGHT_INTENSITY: 2.6,
   AMBIENT_INTENSITY: 0.7,
   SHADOW_MAP_SIZE: 2048,
-  SHADOW_CAMERA_FAR: 70,
+  SHADOW_CAMERA_FAR: 160,
   BACKGROUND_COLOR: 0x1c2430,
 };
 
