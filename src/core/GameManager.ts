@@ -76,7 +76,7 @@ export class GameManager {
     this.touchControls = new TouchControls();
     this.coinField = new CoinField(this.renderer);
     this.cityScene = new CityScene(this.renderer, this.physicsWorld);
-    this.backdrop = new Backdrop(this.renderer);
+    this.backdrop = new Backdrop(this.renderer, this.physicsWorld);
 
     try {
       this.autoSprint = localStorage.getItem(GameManager.AUTO_SPRINT_KEY) === '1';
@@ -100,6 +100,8 @@ export class GameManager {
 
     this.cityScene.setup();
     this.backdrop.setup();
+    // A quarter of the coins land in the outer district to reward exploring it.
+    this.coinField.setOuterSampler(() => this.backdrop.randomDistrictPoint(), 0.25);
 
     await Promise.all([this.playerModel.preload(), this.enemyModel.preload()]);
 
@@ -348,6 +350,8 @@ export class GameManager {
       followHeading
     );
 
+    this.renderer.centerShadowsOn(this.player.getModel().position);
+
     this.uiSystem.updateStamina(this.player.getStaminaRatio(), this.player.isExhausted());
 
     this.uiSystem.updateFPS(deltaTime);
@@ -492,6 +496,7 @@ export class GameManager {
 
     this.inMenu = true;
     this.menuOrbit = 0;
+    this.renderer.centerShadowsOn(new THREE.Vector3());
     this.updateMenuCamera(0);
     this.renderer.render();
     this.start();

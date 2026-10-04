@@ -230,7 +230,7 @@ export class EnemyController {
     const horizontalVelocity = new THREE.Vector3(currentVelocity.x, 0, currentVelocity.z);
     horizontalVelocity.lerp(targetVelocity, 1 - Math.exp(-response * deltaTime));
 
-    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
+    const halfArena = SCENE.PLAY_HALF - 0.5;
     const position = this.physicsWorld.getPosition(this.bodyHandle);
     if (Math.abs(position.x) > halfArena || Math.abs(position.z) > halfArena) {
       position.x = THREE.MathUtils.clamp(position.x, -halfArena, halfArena);

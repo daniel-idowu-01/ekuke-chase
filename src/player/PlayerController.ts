@@ -271,7 +271,7 @@ export class PlayerController {
       1 - Math.exp(-response * deltaTime)
     );
 
-    const halfArena = SCENE.ARENA_SIZE / 2 - 1;
+    const halfArena = SCENE.PLAY_HALF - 0.5;
     const position = this.physicsWorld.getPosition(this.bodyHandle);
     if (Math.abs(position.x) > halfArena || Math.abs(position.z) > halfArena) {
       position.x = VectorUtils.clamp(position.x, -halfArena, halfArena);

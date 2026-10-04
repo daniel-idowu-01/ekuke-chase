@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Renderer } from '../core/Renderer';
+import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { SCENE } from '../utils/Constants';
 
 /**
@@ -8,7 +9,8 @@ import { SCENE } from '../utils/Constants';
  * with procedural windows and blinking aircraft-warning lights, a few landmark
  * towers, avenues that run on to the horizon, bird flocks and a blimp.
  *
- * None of it has colliders. Distant geometry fades into the same haze colour
+ * The first skyline ring is a walkable outer district (colliders, coins,
+ * fenced at SCENE.PLAY_HALF); everything further out is scenery. Distant geometry fades into the same haze colour
  * the scene fog uses so the city melts into the horizon instead of ending at
  * a wall. Call update() every frame (menu included) to animate it.
  */
@@ -180,7 +182,17 @@ const TOWER_FRAG = /* glsl */ `
     win *= (1.0 - isRoof) * uWindows;
     float rnd = hash12(floor(cell) + vSeed);
     vec3 glass = mix(uGlass, uSkyRefl, 0.25 + 0.6 * rnd * smoothstep(0.0, 1.0, vWin.y / 60.0 + 0.3));
-    base = mix(base, glass, win);
+    float upper = step(3.8, vWin.y);
+    base = mix(base, glass, win * upper);
+
+    // Street level: darker storefront band with wide shop windows and a
+    // trim line, so the walkable district holds up close.
+    float wall = 1.0 - isRoof;
+    float shopX = fract(vWin.x / 4.2);
+    float shop = step(0.5, vWin.y) * step(vWin.y, 3.1) * step(0.12, shopX) * step(shopX, 0.88);
+    base = mix(base, base * 0.62, wall * (1.0 - upper));
+    base = mix(base, mix(uGlass, uSkyRefl, 0.35), wall * (1.0 - upper) * shop);
+    base *= 1.0 - 0.3 * wall * upper * step(vWin.y, 4.2);
 
     float diff = max(dot(n, uSunDir), 0.0);
     vec3 col = base * (0.5 + 0.62 * diff + 0.18 * (0.5 + 0.5 * n.y));
@@ -229,8 +241,13 @@ export class Backdrop {
   /** Hero tower sites (x, z); the generated skyline keeps clear of them. */
   private static readonly LANDMARKS: Array<[number, number]> = [[185, -235], [-250, 205], [-215, -255]];
 
-  constructor(renderer: Renderer) {
+  /** Footprints of walkable-district buildings, for spawn rejection. */
+  private blocks: Array<{ x: number; z: number; hw: number; hd: number }> = [];
+  private physicsWorld: PhysicsWorld;
+
+  constructor(renderer: Renderer, physicsWorld: PhysicsWorld) {
     this.renderer = renderer;
+    this.physicsWorld = physicsWorld;
     this.sunDir.copy(renderer.getDirectionalLight().position).normalize();
   }
 
@@ -244,6 +261,7 @@ export class Backdrop {
     this.createMountains(430, 0x7d9cad, 34, 80, 1.3, false);
     this.createOuterGround();
     this.createSkyline();
+    this.createBoundary();
     this.createLandmarks();
     this.createBirds();
     this.createBlimp();
@@ -369,9 +387,12 @@ export class Backdrop {
       new THREE.MeshLambertMaterial({ color: 0x8a9098 })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.06;
+    ground.position.y = -0.02;
     ground.receiveShadow = true;
     this.root.add(ground);
+    // Floor collider for the outer district (top at y = 0, like the arena's).
+    const span = SCENE.PLAY_HALF * 2 + 20;
+    this.physicsWorld.createStaticBody(new THREE.Vector3(0, -0.5, 0), 'box', { width: span, height: 1, depth: span });
 
     // The two avenues carry on past the arena edge toward the horizon.
     // Polygon offset keeps the overlays from z-fighting the ground far away.
@@ -384,13 +405,13 @@ export class Backdrop {
         const mid = sign * (start + len / 2);
         const road = new THREE.Mesh(new THREE.PlaneGeometry(alongX ? len : 11, alongX ? 11 : len), asphalt);
         road.rotation.x = -Math.PI / 2;
-        road.position.set(alongX ? mid : 0, -0.03, alongX ? 0 : mid);
+        road.position.set(alongX ? mid : 0, -0.01, alongX ? 0 : mid);
         road.receiveShadow = true;
         this.root.add(road);
         for (let d = start + 1.5; d < start + 160; d += 3) {
           const dash = new THREE.Mesh(new THREE.PlaneGeometry(alongX ? 1.4 : 0.18, alongX ? 0.18 : 1.4), line);
           dash.rotation.x = -Math.PI / 2;
-          dash.position.set(alongX ? sign * d : 0, -0.02, alongX ? 0 : sign * d);
+          dash.position.set(alongX ? sign * d : 0, 0, alongX ? 0 : sign * d);
           this.root.add(dash);
         }
       }
@@ -438,7 +459,8 @@ export class Backdrop {
       { inner: this.HALF + 200, outer: this.HALF + 330, cell: 30, hMin: 30, hMax: 85, skip: 0.15 },
     ];
 
-    for (const ring of rings) {
+    rings.forEach((ring, ringIndex) => {
+      const walkable = ringIndex === 0;
       for (let gx = -ring.outer; gx <= ring.outer; gx += ring.cell) {
         for (let gz = -ring.outer; gz <= ring.outer; gz += ring.cell) {
           const cheb = Math.max(Math.abs(gx), Math.abs(gz));
@@ -446,10 +468,16 @@ export class Backdrop {
           if (Math.abs(gx) < 12 + ring.cell / 2 || Math.abs(gz) < 12 + ring.cell / 2) continue; // avenue corridors
           if (Math.hypot(gx, gz) > 400) continue;
           if (this.rng() < ring.skip) continue; // the odd empty lot / plaza
+          // Keep the fence line clear: walkable blocks stop short of it and
+          // scenery blocks start beyond it.
+          if (walkable && cheb > SCENE.PLAY_HALF - 10) continue;
+          if (!walkable && cheb - ring.cell * 0.5 < SCENE.PLAY_HALF + 2) continue;
           if (Backdrop.LANDMARKS.some(([lx, lz]) => Math.hypot(gx - lx, gz - lz) < 40)) continue;
 
-          const x = gx + (this.rng() - 0.5) * ring.cell * 0.25;
-          const z = gz + (this.rng() - 0.5) * ring.cell * 0.25;
+          // Walkable ring gets less jitter so its streets stay runnable.
+          const jitter = walkable ? 0.1 : 0.25;
+          const x = gx + (this.rng() - 0.5) * ring.cell * jitter;
+          const z = gz + (this.rng() - 0.5) * ring.cell * jitter;
           const w = ring.cell * (0.45 + this.rng() * 0.3);
           const d = ring.cell * (0.45 + this.rng() * 0.3);
           let angDiff = Math.abs(Math.atan2(z, x) - downtownAngle);
@@ -459,6 +487,10 @@ export class Backdrop {
           h *= 1 + downtown * 1.1;
           const c = new THREE.Color(palette[Math.floor(this.rng() * palette.length)]);
           specs.push({ x, z, w, d, h, c });
+          if (walkable) {
+            this.physicsWorld.createStaticBody(new THREE.Vector3(x, h / 2, z), 'box', { width: w, height: h, depth: d });
+            this.blocks.push({ x, z, hw: w / 2, hd: d / 2 });
+          }
 
           // Setback crown on taller towers.
           if (h > 45 && this.rng() < 0.6) {
@@ -475,7 +507,7 @@ export class Backdrop {
           }
         }
       }
-    }
+    });
 
     const mat = this.makeTowerMaterial(0xffffff);
     const mesh = new THREE.InstancedMesh(box, mat, specs.length);
@@ -553,6 +585,113 @@ export class Backdrop {
       beacon(x, 146, z);
     }
     addBox(stone, -215, -255, 10, 6, 70, 5); // sky bridge
+  }
+
+  /**
+   * Fenced edge of the walkable world, with striped roadblocks where the
+   * avenues cross it so the boundary reads as intentional.
+   */
+  private createBoundary(): void {
+    const edge = SCENE.PLAY_HALF;
+    const height = 2.4;
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.6, metalness: 0.4 });
+    const meshMat = new THREE.MeshStandardMaterial({
+      color: 0x9aa3ad,
+      roughness: 0.5,
+      metalness: 0.5,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    const spacing = 3;
+    const perSide = Math.floor((edge * 2) / spacing);
+    const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.14, height, 0.14), postMat, perSide * 4);
+    const m = new THREE.Matrix4();
+    let n = 0;
+    for (let side = 0; side < 4; side++) {
+      const alongX = side < 2;
+      const sign = side % 2 === 0 ? -1 : 1;
+      for (let i = 0; i < perSide; i++) {
+        const t = -edge + i * spacing;
+        m.makeTranslation(alongX ? t : sign * edge, height / 2, alongX ? sign * edge : t);
+        posts.setMatrixAt(n++, m);
+      }
+      const len = edge * 2;
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(len, height - 0.2), meshMat);
+      panel.position.set(alongX ? 0 : sign * edge, height / 2, alongX ? sign * edge : 0);
+      if (!alongX) panel.rotation.y = Math.PI / 2;
+      this.root.add(panel);
+      for (const y of [0.15, height - 0.05]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : 0.1, 0.1, alongX ? 0.1 : len), postMat);
+        rail.position.set(alongX ? 0 : sign * edge, y, alongX ? sign * edge : 0);
+        this.root.add(rail);
+      }
+      this.physicsWorld.createStaticBody(
+        new THREE.Vector3(alongX ? 0 : sign * (edge + 0.3), 2, alongX ? sign * (edge + 0.3) : 0),
+        'box',
+        { width: alongX ? len + 2 : 0.6, height: 4, depth: alongX ? 0.6 : len + 2 }
+      );
+    }
+    posts.castShadow = true;
+    this.root.add(posts);
+
+    // Red/white striped barriers across each avenue just inside the fence.
+    const stripe = document.createElement('canvas');
+    stripe.width = 128;
+    stripe.height = 16;
+    const ctx = stripe.getContext('2d')!;
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 ? '#f4f1ea' : '#d8392f';
+      ctx.fillRect(i * 16, 0, 16, 16);
+    }
+    const tex = new THREE.CanvasTexture(stripe);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const barMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
+    const legMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ea, roughness: 0.7 });
+    for (let side = 0; side < 4; side++) {
+      const alongX = side < 2;
+      const sign = side % 2 === 0 ? -1 : 1;
+      const g = new THREE.Group();
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(12, 0.35, 0.12), barMat);
+      bar.position.y = 1.05;
+      const bar2 = bar.clone();
+      bar2.position.y = 0.55;
+      g.add(bar, bar2);
+      for (const lx of [-5.5, 0, 5.5]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.25, 0.6), legMat);
+        leg.position.set(lx, 0.62, 0);
+        g.add(leg);
+      }
+      g.traverse((o) => { o.castShadow = true; });
+      // alongX sides sit at z = ±edge and span x; others at x = ±edge.
+      g.position.set(alongX ? 0 : sign * (edge - 1.2), 0, alongX ? sign * (edge - 1.2) : 0);
+      if (!alongX) g.rotation.y = Math.PI / 2;
+      this.root.add(g);
+    }
+  }
+
+  /** True when (x, z) lies inside (or within `pad` of) a district building. */
+  private isBlocked(x: number, z: number, pad: number): boolean {
+    return this.blocks.some((b) => Math.abs(x - b.x) < b.hw + pad && Math.abs(z - b.z) < b.hd + pad);
+  }
+
+  /**
+   * A random open spot in the outer district (between the arena's rim
+   * buildings and the fence), clear of the district's buildings.
+   */
+  randomDistrictPoint(): THREE.Vector2 {
+    const lo = this.HALF + 5;
+    const hi = SCENE.PLAY_HALF - 3;
+    for (let tries = 0; tries < 40; tries++) {
+      const x = (Math.random() * 2 - 1) * hi;
+      const z = (Math.random() * 2 - 1) * hi;
+      if (Math.max(Math.abs(x), Math.abs(z)) < lo) continue;
+      if (this.isBlocked(x, z, 1)) continue;
+      return new THREE.Vector2(x, z);
+    }
+    return new THREE.Vector2(0, hi); // the south avenue is always open
   }
 
   // -------------------------------------------------------------- birds

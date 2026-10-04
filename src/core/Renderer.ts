@@ -8,6 +8,7 @@ export class Renderer {
   private renderer: THREE.WebGLRenderer;
   private directionalLight: THREE.DirectionalLight;
   private ambientLight: THREE.AmbientLight;
+  private sunOffset = new THREE.Vector3();
   private width: number;
   private height: number;
 
@@ -61,6 +62,8 @@ export class Renderer {
     this.directionalLight.shadow.camera.bottom = -72;
     this.directionalLight.shadow.bias = -0.0001;
     this.scene.add(this.directionalLight);
+    this.scene.add(this.directionalLight.target);
+    this.sunOffset.copy(this.directionalLight.position);
 
     window.addEventListener('resize', () => this.onWindowResize());
   }
@@ -91,6 +94,20 @@ export class Renderer {
 
   remove(object: THREE.Object3D): void {
     this.scene.remove(object);
+  }
+
+  /**
+   * Re-centre the sun's shadow frustum on a point (the player) so shadows
+   * work anywhere in the walkable world. Snapped to whole shadow texels to
+   * stop edges shimmering as it moves.
+   */
+  centerShadowsOn(center: THREE.Vector3): void {
+    const cam = this.directionalLight.shadow.camera;
+    const texel = (cam.right - cam.left) / this.directionalLight.shadow.mapSize.width;
+    const x = Math.round(center.x / texel) * texel;
+    const z = Math.round(center.z / texel) * texel;
+    this.directionalLight.position.set(x + this.sunOffset.x, this.sunOffset.y, z + this.sunOffset.z);
+    this.directionalLight.target.position.set(x, 0, z);
   }
 
   getDirectionalLight(): THREE.DirectionalLight {

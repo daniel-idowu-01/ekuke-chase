@@ -58,7 +58,7 @@ export const GAME = {
   EXTRA_DOG_INTERVAL: 18,     // spawn one more dog every N seconds...
   MAX_DOGS: 5,                // ...up to this many total
   NEAR_MISS_DISTANCE: 2.2,    // dog within this then escaping = a "near miss"
-  COIN_COUNT: 72,             // collectible coins kept live on the map
+  COIN_COUNT: 96,             // collectible coins kept live on the map (~1/4 in the outer district)
 };
 
 export const PHYSICS = {
@@ -94,6 +94,9 @@ export const ANIMATION = {
 
 export const SCENE = {
   ARENA_SIZE: 128,
+  // Half-extent of the walkable world. Beyond the arena's rim buildings sits
+  // an open outer district (first skyline ring) out to this fenced boundary.
+  PLAY_HALF: 132,
   GROUND_HEIGHT: -0.5,
   LIGHT_INTENSITY: 2.6,
   AMBIENT_INTENSITY: 0.7,

@@ -34,6 +34,9 @@ export class CoinField {
     });
   }
 
+  private outerSampler?: () => THREE.Vector2;
+  private outerShare = 0;
+
   spawn(count: number): void {
     this.clear();
     for (let i = 0; i < count; i++) {
@@ -72,7 +75,18 @@ export class CoinField {
     return collected;
   }
 
+  /** Optional extra spawn area (e.g. the outer district) used for a share of coins. */
+  setOuterSampler(sampler: () => THREE.Vector2, share: number): void {
+    this.outerSampler = sampler;
+    this.outerShare = share;
+  }
+
   private placeRandomly(coin: THREE.Group): void {
+    if (this.outerSampler && Math.random() < this.outerShare) {
+      const p = this.outerSampler();
+      coin.position.set(p.x, this.baseY, p.y);
+      return;
+    }
     const half = SCENE.ARENA_SIZE / 2 - 4;
     coin.position.set(
       (Math.random() * 2 - 1) * half,
