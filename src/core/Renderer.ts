@@ -16,8 +16,7 @@ export class Renderer {
     this.height = window.innerHeight;
 
     this.scene = new THREE.Scene();
-    this.scene.background = this.createSkyTexture();
-    this.scene.fog = new THREE.FogExp2(0xcfe7ff, 0.014);
+    // Sky, fog and everything past the arena edge are owned by Backdrop.
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -64,24 +63,6 @@ export class Renderer {
     this.scene.add(this.directionalLight);
 
     window.addEventListener('resize', () => this.onWindowResize());
-  }
-
-  private createSkyTexture(): THREE.CanvasTexture {
-    const canvas = document.createElement('canvas');
-    canvas.width = 2;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0.0, '#2f7fe0');
-    gradient.addColorStop(0.55, '#7fb4ef');
-    gradient.addColorStop(1.0, '#d6ecff');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 256);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.needsUpdate = true;
-    return texture;
   }
 
   getScene(): THREE.Scene {

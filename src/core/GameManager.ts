@@ -11,6 +11,7 @@ import { Progression } from '../utils/Progression';
 import { PLAYER_SKINS, getSkin, applySkin } from '../utils/Skins';
 import { AnimationManager } from '../animation/AnimationManager';
 import { CityScene } from '../scenes/CityScene';
+import { Backdrop } from '../scenes/Backdrop';
 import { CharacterModel, remapAnimationClips, fitToHeight } from '../utils/ModelLoader';
 import { GAME, PHYSICS, PLAYER, ENEMY, SCENE } from '../utils/Constants';
 
@@ -47,6 +48,9 @@ export class GameManager {
   private coinsThisRun: number = 0;
   private loopStarted: boolean = false;
   private cityScene: CityScene;
+  private backdrop: Backdrop;
+  private inMenu: boolean = false;
+  private menuOrbit: number = 0;
   private playerModel: CharacterModel = new CharacterModel('/models/RobotExpressive.glb');
   private enemyModel: CharacterModel = new CharacterModel('/models/Wolf.glb');
   private gameOver: boolean = false;
@@ -72,6 +76,7 @@ export class GameManager {
     this.touchControls = new TouchControls();
     this.coinField = new CoinField(this.renderer);
     this.cityScene = new CityScene(this.renderer, this.physicsWorld);
+    this.backdrop = new Backdrop(this.renderer);
 
     try {
       this.autoSprint = localStorage.getItem(GameManager.AUTO_SPRINT_KEY) === '1';
@@ -94,6 +99,7 @@ export class GameManager {
     console.log('Initializing game...');
 
     this.cityScene.setup();
+    this.backdrop.setup();
 
     await Promise.all([this.playerModel.preload(), this.enemyModel.preload()]);
 
@@ -111,6 +117,7 @@ export class GameManager {
 
   private async beginGame(count: number): Promise<void> {
     this.dogCount = count;
+    this.inMenu = false;
     await this.createPlayer();
     this.cameraController.setTarget(this.player!.getModel());
     await this.createEnemies(count);
@@ -287,6 +294,8 @@ export class GameManager {
     }
 
     this.update(deltaTime);
+    this.backdrop.update(realDelta);
+    if (this.inMenu) this.updateMenuCamera(realDelta);
 
     this.render();
   };
@@ -419,6 +428,15 @@ export class GameManager {
     this.spawningDog = false;
   }
 
+  /** Slow orbit around the city behind the start menu. */
+  private updateMenuCamera(dt: number): void {
+    this.menuOrbit += dt * 0.05;
+    const a = 0.53 + this.menuOrbit;
+    const cam = this.renderer.getCamera();
+    cam.position.set(Math.sin(a) * 27.8, 11, Math.cos(a) * 27.8);
+    cam.lookAt(0, 6, 0);
+  }
+
   private render(): void {
     this.renderer.render();
   }
@@ -472,10 +490,11 @@ export class GameManager {
     this.gameOver = true;
     this.uiSystem.hideGameOver();
 
-    const cam = this.renderer.getCamera();
-    cam.position.set(14, 11, 24);
-    cam.lookAt(0, 1.5, 0);
+    this.inMenu = true;
+    this.menuOrbit = 0;
+    this.updateMenuCamera(0);
     this.renderer.render();
+    this.start();
 
     this.uiSystem.updateCoins(Progression.getCoins(), 0);
     this.refreshShop();
