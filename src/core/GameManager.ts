@@ -277,7 +277,7 @@ export class GameManager {
     requestAnimationFrame(this.gameLoop);
 
     const currentTime = performance.now();
-    const realDelta = Math.min((currentTime - this.lastFrameTime) / 1000, 0.016);
+    const realDelta = Math.min((currentTime - this.lastFrameTime) / 1000, 0.05);
     this.lastFrameTime = currentTime;
 
     // Slow-mo: ease the time scale toward its target (0.4 during a near-miss)
